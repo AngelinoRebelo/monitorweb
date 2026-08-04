@@ -4,27 +4,54 @@ import https from 'node:https';
 import http from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { Agent, ProxyAgent, fetch as undiciFetch } from 'undici';
 
 dns.setDefaultResultOrder('ipv4first');
 
 const execFileAsync = promisify(execFile);
+const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS) || 20000;
 
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
 
-export function formatFetchError(err) {
+function proxyUrl() {
+  return process.env.PROXY_URL || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
+}
+
+function dispatcher() {
+  const proxy = proxyUrl();
+  if (proxy) return new ProxyAgent(proxy);
+  return new Agent({
+    connect: { family: 4, timeout: FETCH_TIMEOUT_MS },
+    bodyTimeout: FETCH_TIMEOUT_MS,
+    headersTimeout: FETCH_TIMEOUT_MS,
+  });
+}
+
+export function formatFetchError(err, url = '') {
   if (err?.name === 'AbortError') return 'Timeout ao buscar a página';
 
   const cause = err?.cause;
   const nested = cause?.errors?.[0];
   const code = cause?.code || nested?.code || err?.code;
   const detail = cause?.message || nested?.message || err?.message || 'Falha de rede';
+  const host = (() => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return '';
+    }
+  })();
+  const isSei = /sei\.rj\.gov\.br$/i.test(host);
 
   if (code === 'EAI_AGAIN' || code === 'ENOTFOUND') {
     return `DNS falhou ao resolver o site (${code})`;
   }
-  if (code === 'ETIMEDOUT' || code === 'ESOCKETTIMEDOUT') {
-    return `Timeout de conexão com o site (${code})`;
+  if (code === 'ETIMEDOUT' || code === 'ESOCKETTIMEDOUT' || /timeout/i.test(detail)) {
+    if (isSei) {
+      return 'Timeout no SEI a partir do Railway. O SEI bloqueia/não responde de servidores nos EUA — configure PROXY_URL (Brasil) ou rode o monitor localmente.';
+    }
+    return `Timeout de conexão com o site (${code || 'timeout'})`;
   }
   if (code === 'ECONNRESET' || code === 'ECONNREFUSED') {
     return `Conexão recusada/resetada pelo site (${code})`;
@@ -33,6 +60,9 @@ export function formatFetchError(err) {
     return `Problema de certificado SSL do site (${code})`;
   }
 
+  if (/fetch failed/i.test(detail) && isSei) {
+    return 'Falha ao acessar o SEI pelo Railway (rede bloqueada). Configure PROXY_URL no Brasil ou use o app em rede local.';
+  }
   if (/fetch failed/i.test(detail) && code) return `Falha de rede (${code})`;
   if (/fetch failed/i.test(detail)) {
     return 'Falha de rede ao acessar o site (possível bloqueio do servidor de origem ao Railway)';
@@ -115,7 +145,7 @@ async function fetchWithNodeHttp(url, { accept } = {}) {
         method: 'GET',
         headers,
         family: 4,
-        timeout: 45000,
+        timeout: FETCH_TIMEOUT_MS,
         rejectUnauthorized: true,
       },
       (res) => {
@@ -151,7 +181,7 @@ async function fetchWithCurl(url, { accept } = {}) {
     '-sS',
     '-L',
     '--max-time',
-    '45',
+    String(Math.ceil(FETCH_TIMEOUT_MS / 1000)),
     '--ipv4',
     '-A',
     USER_AGENT,
@@ -166,6 +196,9 @@ async function fetchWithCurl(url, { accept } = {}) {
     '\n__MW_META__:%{http_code}|%{content_type}',
     url,
   ];
+  const proxy = proxyUrl();
+  if (proxy) args.splice(1, 0, '-x', proxy);
+
   const { stdout } = await execFileAsync('curl', args, {
     maxBuffer: 12 * 1024 * 1024,
     encoding: 'buffer',
@@ -195,31 +228,26 @@ async function fetchWithCurl(url, { accept } = {}) {
 }
 
 async function fetchWithUndici(url, { accept } = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45000);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: 'follow',
-      headers: buildHeaders(url, { accept }),
-    });
-    const body = Buffer.from(await res.arrayBuffer());
-    return {
-      ok: res.ok,
-      status: res.status,
-      statusText: res.statusText,
-      headers: res.headers,
-      body,
-      async arrayBuffer() {
-        return body;
-      },
-      async text() {
-        return body.toString('utf8');
-      },
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
+  const res = await undiciFetch(url, {
+    redirect: 'follow',
+    headers: buildHeaders(url, { accept }),
+    dispatcher: dispatcher(),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  const body = Buffer.from(await res.arrayBuffer());
+  return {
+    ok: res.ok,
+    status: res.status,
+    statusText: res.statusText,
+    headers: res.headers,
+    body,
+    async arrayBuffer() {
+      return body;
+    },
+    async text() {
+      return body.toString('utf8');
+    },
+  };
 }
 
 export async function fetchResponse(url, { accept } = {}) {
@@ -231,17 +259,16 @@ export async function fetchResponse(url, { accept } = {}) {
 
   let lastError;
   for (const [name, fn] of strategies) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const res = await fn(url, { accept });
-        if (!res) throw new Error(`Estratégia ${name} sem resposta`);
-        return res;
-      } catch (err) {
-        lastError = err;
-        console.warn(`[fetch] ${name} tentativa ${attempt} falhou:`, formatFetchError(err));
-        await new Promise((r) => setTimeout(r, 400 * attempt));
-      }
+    try {
+      const res = await fn(url, { accept });
+      if (!res) throw new Error(`Estratégia ${name} sem resposta`);
+      return res;
+    } catch (err) {
+      lastError = err;
+      console.warn(`[fetch] ${name} falhou:`, formatFetchError(err, url));
     }
   }
-  throw lastError || new Error('Falha de rede ao buscar a página');
+  const wrapped = lastError || new Error('Falha de rede ao buscar a página');
+  wrapped.message = formatFetchError(wrapped, url);
+  throw wrapped;
 }

@@ -261,7 +261,7 @@ export async function checkMonitor(id, { previousContent } = {}) {
       kind,
     };
   } catch (err) {
-    const message = formatFetchError(err);
+    const message = formatFetchError(err, monitor.url);
     const result = saveCheckResult(id, {
       hash: null,
       content: null,

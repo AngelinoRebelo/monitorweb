@@ -34,6 +34,15 @@ Variáveis opcionais:
 |------------|----------|------------------------------|
 | `PORT`     | `3000`   | Porta HTTP                   |
 | `DATA_DIR` | `./data` | Pasta do banco JSON          |
+| `PROXY_URL` | —       | Proxy HTTP(S) de saída (útil para SEI/RJ a partir do Railway) |
+| `FETCH_TIMEOUT_MS` | `20000` | Timeout de busca por página |
+
+### SEI / sites do governo
+
+Alguns sites (como `sei.rj.gov.br`) **não respondem a servidores no exterior**. No Railway (EUA) a checagem pode dar timeout. Opções:
+
+1. Configurar `PROXY_URL` apontando para um proxy no Brasil
+2. Rodar o MonitorWeb na sua rede local (`npm start`)
 
 ## Notificações
 

@@ -10,7 +10,7 @@ import {
   getSettings,
   updateSettings,
 } from './db.js';
-import { runCheck, scheduleMonitor, unscheduleMonitor, rescheduleAll } from './scheduler.js';
+import { scheduleMonitor, unscheduleMonitor, rescheduleAll } from './scheduler.js';
 import { addSseClient, removeSseClient } from './notify.js';
 import { changesFromDiffText } from './humanDiff.js';
 import { checkMonitor } from './monitor.js';
@@ -64,9 +64,12 @@ router.get('/health/outbound', async (req, res) => {
   } catch (err) {
     res.status(502).json({
       ok: false,
-      error: formatFetchError(err),
+      error: formatFetchError(err, target),
       raw: err?.message || String(err),
       code: err?.cause?.code || err?.code || null,
+      hint: /sei\.rj\.gov\.br/i.test(target)
+        ? 'O SEI geralmente não responde a partir do Railway (EUA). Use PROXY_URL no Brasil ou rode localmente.'
+        : null,
     });
   }
 });
