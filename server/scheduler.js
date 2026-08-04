@@ -6,8 +6,11 @@ import { notifyChange, notifyStatus } from './notify.js';
 /** @type {Map<string, import('node-cron').ScheduledTask>} */
 const jobs = new Map();
 const running = new Set();
+const queue = [];
+let active = 0;
+const MAX_CONCURRENT = 2;
 
-async function runCheck(id, reason = 'schedule') {
+async function executeCheck(id, reason = 'schedule') {
   if (running.has(id)) return;
   running.add(id);
   try {
@@ -25,6 +28,7 @@ async function runCheck(id, reason = 'schedule') {
       notifyStatus(`OK: ${monitor.name}`, {
         monitorId: id,
         status: result.monitor?.lastStatus,
+        error: result.error || result.monitor?.lastError || null,
       });
     }
   } catch (err) {
@@ -34,6 +38,31 @@ async function runCheck(id, reason = 'schedule') {
     });
   } finally {
     running.delete(id);
+  }
+}
+
+function pumpQueue() {
+  while (active < MAX_CONCURRENT && queue.length) {
+    const next = queue.shift();
+    active += 1;
+    executeCheck(next.id, next.reason)
+      .catch(() => {})
+      .finally(() => {
+        active -= 1;
+        pumpQueue();
+      });
+  }
+}
+
+async function runCheck(id, reason = 'schedule') {
+  if (running.has(id) || queue.some((item) => item.id === id)) return;
+  queue.push({ id, reason });
+  pumpQueue();
+  // wait until this id leaves queue+running (best-effort for manual checks)
+  const started = Date.now();
+  while (Date.now() - started < 120000) {
+    if (!running.has(id) && !queue.some((item) => item.id === id)) break;
+    await new Promise((r) => setTimeout(r, 150));
   }
 }
 
@@ -72,10 +101,13 @@ export function rescheduleAll() {
 
 export function startScheduler() {
   rescheduleAll();
-  // first pass shortly after boot
-  setTimeout(() => {
-    for (const monitor of listMonitors()) {
-      if (monitor.enabled) runCheck(monitor.id, 'startup');
+  // staggered first pass to avoid flooding targets like SEI
+  setTimeout(async () => {
+    const monitors = listMonitors().filter((m) => m.enabled);
+    for (const [index, monitor] of monitors.entries()) {
+      setTimeout(() => {
+        runCheck(monitor.id, 'startup');
+      }, index * 1500);
     }
   }, 2500);
 }

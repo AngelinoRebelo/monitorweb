@@ -279,19 +279,107 @@ function rebuildFromUnifiedDiff(diffText) {
   };
 }
 
+function extractJsonObjects(text) {
+  const objects = [];
+  const src = String(text || '');
+  for (let i = 0; i < src.length; i++) {
+    if (src[i] !== '{') continue;
+    let depth = 0;
+    for (let j = i; j < src.length; j++) {
+      if (src[j] === '{') depth += 1;
+      if (src[j] === '}') depth -= 1;
+      if (depth === 0) {
+        const slice = src.slice(i, j + 1);
+        try {
+          objects.push(JSON.parse(slice));
+        } catch {
+          /* ignore incomplete fragments */
+        }
+        i = j;
+        break;
+      }
+    }
+  }
+  return objects;
+}
+
+function describeQuotaLike(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  const number = obj.number ?? obj.quotaNumber;
+  const status = obj.status;
+  const name = personName(obj);
+  if (number == null && !status && name === '—') return null;
+  const parts = [];
+  if (number != null) parts.push(`Cota ${number}`);
+  if (status) parts.push(formatValue('status', status));
+  if (name !== '—') parts.push(name);
+  if (obj.expiresAtMs) parts.push(`expira ${formatValue('expiresAtMs', obj.expiresAtMs)}`);
+  return parts.join(' · ');
+}
+
+function describeReservationLike(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  if (!obj.reservationId && !obj.quotaNumbers && !obj.firstName) return null;
+  const parts = [`Reserva · ${personName(obj)}`];
+  if (obj.status) parts.push(formatValue('status', obj.status));
+  if (obj.quotaNumbers) parts.push(`cotas ${formatValue('quotaNumbers', obj.quotaNumbers)}`);
+  return parts.join(' · ');
+}
+
+function humanLinesFromText(text) {
+  const objects = extractJsonObjects(text);
+  const lines = [];
+  for (const obj of objects) {
+    const quota = describeQuotaLike(obj);
+    const reservation = describeReservationLike(obj);
+    if (quota) lines.push(quota);
+    else if (reservation) lines.push(reservation);
+    else {
+      const keys = Object.keys(obj).filter((k) => !VOLATILE_SKIP.has(k)).slice(0, 6);
+      if (!keys.length) continue;
+      lines.push(
+        keys
+          .map((k) => `${labelOf(k)}: ${formatValue(k, obj[k])}`)
+          .join(' · ')
+      );
+    }
+  }
+  if (lines.length) return [...new Set(lines)];
+
+  const plain = String(text || '')
+    .replace(/[{}\[\]",]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!plain) return [];
+  // never return raw code-looking dumps
+  if (/expiresAtMs|holderFirstName|quotaNumbers/.test(plain)) {
+    return ['Alteração nos dados da página (detalhe indisponível nesta captura)'];
+  }
+  return [plain.slice(0, 400)];
+}
+
+const VOLATILE_SKIP = new Set(['_snapshotAt', '_fetchedAt']);
+
 function textChanges(beforeText, afterText) {
-  const before = String(beforeText || '').trim();
-  const after = String(afterText || '').trim();
-  if (!before && !after) return [];
-  return [
-    {
-      title: 'Conteúdo da página',
+  const beforeLines = humanLinesFromText(beforeText);
+  const afterLines = humanLinesFromText(afterText);
+  if (!beforeLines.length && !afterLines.length) return [];
+
+  const max = Math.max(beforeLines.length, afterLines.length, 1);
+  const groups = [];
+  for (let i = 0; i < max; i++) {
+    const from = beforeLines[i] || '—';
+    const to = afterLines[i] || '—';
+    if (from === to) continue;
+    groups.push({
+      title: beforeLines.length + afterLines.length > 1 ? `Alteração ${i + 1}` : 'O que mudou',
       items: [
-        { label: 'Antes', from: before.slice(0, 500) || '—', to: null },
-        { label: 'Depois', from: null, to: after.slice(0, 500) || '—' },
+        { label: 'Antes', from, to: null },
+        { label: 'Depois', from: null, to },
       ],
-    },
-  ];
+    });
+  }
+  return groups.slice(0, 40);
 }
 
 export function buildHumanChanges(beforeText, afterText) {

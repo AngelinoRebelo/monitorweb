@@ -190,40 +190,46 @@ function originLabel(event) {
     </div>`;
 }
 
-function renderChangeItem(item) {
-  if (item.to == null && item.from != null) {
-    return `
-      <div class="change-row">
-        <span class="change-label">${escapeHtml(item.label)}</span>
-        <span class="change-from only">${escapeHtml(item.from)}</span>
-      </div>`;
+function collectSide(changes, side) {
+  const blocks = [];
+  for (const group of changes || []) {
+    const lines = [];
+    for (const item of group.items || []) {
+      const value = side === 'before' ? item.from : item.to;
+      if (value == null || value === '') continue;
+      if (item.label === 'Antes' || item.label === 'Depois') {
+        lines.push(String(value));
+      } else {
+        lines.push(`${item.label}: ${value}`);
+      }
+    }
+    if (lines.length) {
+      blocks.push({ title: group.title, lines });
+    }
   }
-  if (item.from == null && item.to != null) {
-    return `
-      <div class="change-row">
-        <span class="change-label">${escapeHtml(item.label)}</span>
-        <span class="change-to only">${escapeHtml(item.to)}</span>
-      </div>`;
-  }
-  return `
-    <div class="change-row">
-      <span class="change-label">${escapeHtml(item.label)}</span>
-      <div class="change-values">
-        <span class="change-from">${escapeHtml(item.from)}</span>
-        <span class="change-arrow" aria-hidden="true">→</span>
-        <span class="change-to">${escapeHtml(item.to)}</span>
-      </div>
-    </div>`;
+  return blocks;
 }
 
-function renderChangeGroup(group) {
+function renderSide(title, blocks, side) {
+  const body = blocks.length
+    ? blocks
+        .map(
+          (block) => `
+        <article class="side-card">
+          <h4>${escapeHtml(block.title)}</h4>
+          <ul>
+            ${block.lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
+          </ul>
+        </article>`
+        )
+        .join('')
+    : `<p class="empty">Sem alterações neste lado.</p>`;
+
   return `
-    <article class="change-card">
-      <h4>${escapeHtml(group.title)}</h4>
-      <div class="change-rows">
-        ${(group.items || []).map(renderChangeItem).join('')}
-      </div>
-    </article>`;
+    <section class="diff-pane diff-pane--${side}">
+      <header class="diff-pane__head">${title}</header>
+      <div class="diff-pane__body">${body}</div>
+    </section>`;
 }
 
 function openDiff(event) {
@@ -231,15 +237,19 @@ function openDiff(event) {
   els.diffTitle.textContent = `${event.monitorName} · ${formatDate(event.createdAt)}`;
   els.diffSummary.textContent = event.summary || 'Alterações detectadas';
 
-  if (!changes.length) {
+  const beforeBlocks = collectSide(changes, 'before');
+  const afterBlocks = collectSide(changes, 'after');
+
+  if (!beforeBlocks.length && !afterBlocks.length) {
     els.diffView.innerHTML = `
       ${originLabel(event)}
       <p class="empty">Não há detalhes legíveis para esta alteração.</p>`;
   } else {
     els.diffView.innerHTML = `
       ${originLabel(event)}
-      <div class="change-list">
-        ${changes.map(renderChangeGroup).join('')}
+      <div class="diff-compare">
+        ${renderSide('Antes', beforeBlocks, 'before')}
+        ${renderSide('Depois', afterBlocks, 'after')}
       </div>`;
   }
 
