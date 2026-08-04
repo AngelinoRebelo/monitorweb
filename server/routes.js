@@ -13,6 +13,9 @@ import {
 import { runCheck, scheduleMonitor, unscheduleMonitor, rescheduleAll } from './scheduler.js';
 import { addSseClient, removeSseClient } from './notify.js';
 import { changesFromDiffText } from './humanDiff.js';
+import { checkMonitor } from './monitor.js';
+import { notifyChange } from './notify.js';
+import { fetchResponse, decodeResponseBody, formatFetchError } from './fetchPage.js';
 
 const router = Router();
 
@@ -33,6 +36,39 @@ function publicMonitor(monitor) {
 
 router.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'monitorweb' });
+});
+
+router.get('/health/outbound', async (req, res) => {
+  const target = String(req.query.url || 'https://sei.rj.gov.br/');
+  try {
+    const parsed = new URL(target);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return res.status(400).json({ ok: false, error: 'URL inválida' });
+    }
+  } catch {
+    return res.status(400).json({ ok: false, error: 'URL inválida' });
+  }
+
+  try {
+    const started = Date.now();
+    const response = await fetchResponse(target);
+    const body = await decodeResponseBody(response);
+    res.json({
+      ok: response.ok,
+      status: response.status,
+      elapsedMs: Date.now() - started,
+      contentType: response.headers.get('content-type'),
+      bytes: body.length,
+      preview: body.replace(/\s+/g, ' ').slice(0, 180),
+    });
+  } catch (err) {
+    res.status(502).json({
+      ok: false,
+      error: formatFetchError(err),
+      raw: err?.message || String(err),
+      code: err?.cause?.code || err?.code || null,
+    });
+  }
 });
 
 router.get('/settings', (_req, res) => {
@@ -94,7 +130,16 @@ router.delete('/monitors/:id', (req, res) => {
 router.post('/monitors/:id/check', async (req, res) => {
   const monitor = getMonitor(req.params.id);
   if (!monitor) return res.status(404).json({ error: 'Monitor não encontrado' });
-  await runCheck(req.params.id, 'manual');
+  try {
+    const result = await checkMonitor(req.params.id, {
+      previousContent: monitor.lastContent || '',
+    });
+    if (result.changed && result.event) {
+      notifyChange({ monitor: result.monitor, event: result.event });
+    }
+  } catch (err) {
+    return res.status(500).json({ error: formatFetchError(err) });
+  }
   res.json(publicMonitor(getMonitor(req.params.id)));
 });
 

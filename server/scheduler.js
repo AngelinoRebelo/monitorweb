@@ -54,16 +54,22 @@ function pumpQueue() {
   }
 }
 
-async function runCheck(id, reason = 'schedule') {
-  if (running.has(id) || queue.some((item) => item.id === id)) return;
-  queue.push({ id, reason });
-  pumpQueue();
-  // wait until this id leaves queue+running (best-effort for manual checks)
+async function waitUntilIdle(id, timeoutMs = 120000) {
   const started = Date.now();
-  while (Date.now() - started < 120000) {
-    if (!running.has(id) && !queue.some((item) => item.id === id)) break;
+  while (Date.now() - started < timeoutMs) {
+    if (!running.has(id) && !queue.some((item) => item.id === id)) return;
     await new Promise((r) => setTimeout(r, 150));
   }
+}
+
+async function runCheck(id, reason = 'schedule') {
+  if (running.has(id) || queue.some((item) => item.id === id)) {
+    await waitUntilIdle(id);
+    if (reason !== 'manual') return;
+  }
+  queue.push({ id, reason });
+  pumpQueue();
+  await waitUntilIdle(id);
 }
 
 function cronExpression(intervalMinutes) {
