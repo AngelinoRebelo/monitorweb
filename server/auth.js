@@ -23,6 +23,7 @@ const COOKIE_NAME = 'mw_session';
 const SESSION_DAYS = 30;
 const RESET_HOURS = 2;
 const DEFAULT_MAX_MONITORS = Number(process.env.DEFAULT_MAX_MONITORS) || 10;
+const DEFAULT_EMAIL_DAILY_LIMIT = Number(process.env.DEFAULT_EMAIL_DAILY_LIMIT) || 10;
 const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
 function authSecret() {
@@ -132,10 +133,18 @@ function verifySessionToken(token) {
   }
 }
 
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function normalizeUser(user, { isFirst = false } = {}) {
   const status = ['off', 'pending', 'approved'].includes(user.emailNotifyStatus)
     ? user.emailNotifyStatus
     : 'off';
+  const dailyLimit =
+    user.emailNotifyDailyLimit == null || Number.isNaN(Number(user.emailNotifyDailyLimit))
+      ? DEFAULT_EMAIL_DAILY_LIMIT
+      : Math.max(0, Number(user.emailNotifyDailyLimit));
   return {
     ...user,
     role: user.role === 'admin' || isFirst ? 'admin' : 'user',
@@ -146,6 +155,9 @@ function normalizeUser(user, { isFirst = false } = {}) {
         : Math.max(0, Number(user.maxMonitors)),
     emailNotifyAllowed: user.emailNotifyAllowed === true,
     emailNotifyStatus: status,
+    emailNotifyDailyLimit: dailyLimit,
+    emailNotifySentDate: user.emailNotifySentDate || null,
+    emailNotifySentCount: Number(user.emailNotifySentCount) || 0,
     resetTokenHash: user.resetTokenHash || null,
     resetExpires: user.resetExpires || null,
     resetRequestedAt: user.resetRequestedAt || null,
@@ -185,6 +197,8 @@ function readUsers() {
 
 function publicUser(user) {
   if (!user) return null;
+  const sentToday =
+    user.emailNotifySentDate === todayKey() ? Number(user.emailNotifySentCount) || 0 : 0;
   return {
     id: user.id,
     email: user.email,
@@ -195,6 +209,8 @@ function publicUser(user) {
     monitorCount: countMonitorsByUser(user.id),
     emailNotifyAllowed: user.emailNotifyAllowed === true,
     emailNotifyStatus: user.emailNotifyStatus || 'off',
+    emailNotifyDailyLimit: user.emailNotifyDailyLimit ?? DEFAULT_EMAIL_DAILY_LIMIT,
+    emailNotifySentToday: sentToday,
     resetPending: Boolean(user.resetTokenHash && user.resetExpires && Date.parse(user.resetExpires) > Date.now()),
     resetRequestedAt: user.resetRequestedAt || null,
   };
@@ -349,7 +365,26 @@ export function getApprovedEmailNotify(userId) {
   if (!user || user.active === false) return null;
   if (user.emailNotifyAllowed !== true) return null;
   if (user.emailNotifyStatus !== 'approved') return null;
-  return { email: user.email, userId: user.id };
+  return {
+    email: user.email,
+    userId: user.id,
+    dailyLimit: user.emailNotifyDailyLimit ?? DEFAULT_EMAIL_DAILY_LIMIT,
+  };
+}
+
+/** Reserve one daily e-mail slot. Returns false if limit reached. */
+export function consumeEmailNotifyQuota(userId) {
+  const user = findUserById(userId);
+  if (!user) return false;
+  const today = todayKey();
+  const count = user.emailNotifySentDate === today ? Number(user.emailNotifySentCount) || 0 : 0;
+  const limit = user.emailNotifyDailyLimit ?? DEFAULT_EMAIL_DAILY_LIMIT;
+  if (count >= limit) return false;
+  updateUserRecord(userId, {
+    emailNotifySentDate: today,
+    emailNotifySentCount: count + 1,
+  });
+  return true;
 }
 
 export function bootstrapAdminFromEnv() {
@@ -577,6 +612,7 @@ adminRouter.get('/users', (_req, res) => {
   res.json({
     users,
     defaultMaxMonitors: DEFAULT_MAX_MONITORS,
+    defaultEmailDailyLimit: DEFAULT_EMAIL_DAILY_LIMIT,
     mail: { configured: isMailConfigured(), provider: mailProvider() },
   });
 });
@@ -610,6 +646,12 @@ adminRouter.patch('/users/:id', (req, res) => {
     if (!patch.emailNotifyAllowed) {
       patch.emailNotifyStatus = 'off';
     }
+  }
+  if (req.body?.emailNotifyDailyLimit != null) {
+    patch.emailNotifyDailyLimit = Math.max(
+      0,
+      Math.min(500, Number(req.body.emailNotifyDailyLimit) || 0)
+    );
   }
   if (req.body?.emailNotifyStatus != null) {
     const status = String(req.body.emailNotifyStatus);

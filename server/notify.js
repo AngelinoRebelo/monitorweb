@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { getSettings } from './db.js';
-import { getApprovedEmailNotify } from './auth.js';
+import { getApprovedEmailNotify, consumeEmailNotifyQuota } from './auth.js';
 import { appBaseUrl, isMailConfigured, sendChangeNotificationEmail } from './mail.js';
 
 /** @type {Set<{ res: import('express').Response, userId: string|null }>} */
@@ -64,6 +64,10 @@ async function notifyEmailChange({ monitor, event, title, body }) {
   if (!monitor?.userId || !isMailConfigured()) return;
   const target = getApprovedEmailNotify(monitor.userId);
   if (!target) return;
+  if (!consumeEmailNotifyQuota(monitor.userId)) {
+    console.warn(`[mail] limite diário atingido para ${target.email}`);
+    return;
+  }
   try {
     await sendChangeNotificationEmail({
       to: target.email,

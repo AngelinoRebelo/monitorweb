@@ -149,17 +149,28 @@ function emailNotifyLabel(status) {
 
 function syncEmailNotifyUi(user) {
   if (!els.emailNotifyBox) return;
+  // Always visible so the user knows the feature exists.
+  els.emailNotifyBox.hidden = false;
   const allowed = user?.emailNotifyAllowed === true;
   const status = user?.emailNotifyStatus || 'off';
-  els.emailNotifyBox.hidden = !allowed;
-  if (!allowed) return;
+  const dailyLimit = user?.emailNotifyDailyLimit ?? 10;
+  const sentToday = user?.emailNotifySentToday ?? 0;
+
   if (els.emailNotifications) {
-    els.emailNotifications.checked = status === 'pending' || status === 'approved';
-    els.emailNotifications.disabled = false;
+    els.emailNotifications.disabled = !allowed;
+    els.emailNotifications.checked = allowed && (status === 'pending' || status === 'approved');
   }
+
   if (els.emailNotifyStatus) {
-    els.emailNotifyStatus.textContent = emailNotifyLabel(status);
-    els.emailNotifyStatus.classList.toggle('warn-text', status === 'pending');
+    if (!allowed) {
+      els.emailNotifyStatus.textContent =
+        'Aguardando o administrador liberar notificações por e-mail para sua conta.';
+      els.emailNotifyStatus.classList.add('warn-text');
+    } else {
+      const quota = `Limite hoje: ${sentToday}/${dailyLimit}`;
+      els.emailNotifyStatus.textContent = `${emailNotifyLabel(status)} · ${quota}`;
+      els.emailNotifyStatus.classList.toggle('warn-text', status === 'pending');
+    }
   }
 }
 
@@ -476,14 +487,21 @@ function renderUsers(users) {
         </div>
         <div class="email-admin-box">
           <label class="check">
-            <input type="checkbox" class="email-allowed" ${u.emailNotifyAllowed ? 'checked' : ''} />
+            <input type="checkbox" class="email-allowed" ${u.emailNotifyAllowed ? 'checked' : ''} data-action="toggle-email-allow" />
             Liberar opção de notificação por e-mail
           </label>
-          <p class="meta">Pedido do usuário: <strong>${emailNotifyLabel(emailStatus)}</strong></p>
+          <label>
+            Limite de e-mails por dia
+            <input type="number" min="0" max="500" class="email-daily-limit" value="${Number(
+              u.emailNotifyDailyLimit ?? 10
+            )}" />
+          </label>
+          <p class="meta">
+            Pedido do usuário: <strong>${emailNotifyLabel(emailStatus)}</strong>
+            · hoje ${u.emailNotifySentToday ?? 0}/${u.emailNotifyDailyLimit ?? 10}
+          </p>
           <div class="actions wrap">
-            <button type="button" class="btn small" data-action="toggle-email-allow">${
-              u.emailNotifyAllowed ? 'Bloquear e-mail' : 'Liberar e-mail'
-            }</button>
+            <button type="button" class="btn small" data-action="save-email-limit">Salvar limite e-mail</button>
             ${
               emailStatus === 'pending'
                 ? `<button type="button" class="btn small" data-action="approve-email">Aprovar e-mail</button>
@@ -666,6 +684,34 @@ els.dashFeed?.addEventListener('click', async (e) => {
 });
 
 els.usersList?.addEventListener('click', async (e) => {
+  const allowBox = e.target.closest('.email-allowed');
+  if (allowBox) {
+    const card = allowBox.closest('.user-card');
+    const id = card?.dataset.id;
+    if (!id) return;
+    const user = cachedUsers.find((u) => u.id === id);
+    const next = allowBox.checked;
+    try {
+      await api(`/admin/users/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          emailNotifyAllowed: next,
+          ...(next ? {} : { emailNotifyStatus: 'off' }),
+        }),
+      });
+      adminFlash(
+        next
+          ? `Opção de e-mail liberada para ${user.email}. Peça ao usuário para marcar a caixa em Monitores.`
+          : `Opção de e-mail bloqueada para ${user.email}.`
+      );
+      await refreshAdmin();
+    } catch (err) {
+      allowBox.checked = !next;
+      adminFlash(err.message, true);
+    }
+    return;
+  }
+
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
   const card = btn.closest('.user-card');
@@ -678,22 +724,18 @@ els.usersList?.addEventListener('click', async (e) => {
     if (action === 'save-limit') {
       const maxMonitors = Number(card.querySelector('.max-monitors').value);
       await api(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ maxMonitors }) });
-      adminFlash(`Limite de ${user.email} atualizado.`);
+      adminFlash(`Limite de sites de ${user.email} atualizado.`);
     }
-    if (action === 'toggle-email-allow') {
-      const next = !user.emailNotifyAllowed;
+    if (action === 'save-email-limit') {
+      const emailNotifyDailyLimit = Number(card.querySelector('.email-daily-limit').value);
       await api(`/admin/users/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify({
-          emailNotifyAllowed: next,
-          ...(next ? {} : { emailNotifyStatus: 'off' }),
-        }),
+        body: JSON.stringify({ emailNotifyDailyLimit }),
       });
-      adminFlash(
-        next
-          ? `Opção de e-mail liberada para ${user.email}.`
-          : `Opção de e-mail bloqueada para ${user.email}.`
-      );
+      adminFlash(`Limite diário de e-mails de ${user.email}: ${emailNotifyDailyLimit}.`);
+    }
+    if (action === 'toggle-email-allow') {
+      // handled by checkbox above
     }
     if (action === 'approve-email') {
       await api(`/admin/users/${id}`, {
