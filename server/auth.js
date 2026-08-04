@@ -127,8 +127,9 @@ function findUserByEmail(email) {
 }
 
 function registrationOpen() {
-  if (process.env.ALLOW_REGISTER === 'true') return true;
-  return readUsers().length === 0;
+  // Multi-user by default. Set ALLOW_REGISTER=false to lock new signups.
+  if (process.env.ALLOW_REGISTER === 'false') return false;
+  return true;
 }
 
 function setSessionCookie(res, userId) {
@@ -204,6 +205,15 @@ export function requirePageAuth(req, res, next) {
   return res.redirect('/login.html');
 }
 
+export function listUsersPublic() {
+  return readUsers().map(publicUser);
+}
+
+export function getOldestUserId() {
+  const users = readUsers().slice().sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  return users[0]?.id || null;
+}
+
 export function bootstrapAdminFromEnv() {
   const email = normalizeEmail(process.env.BOOTSTRAP_EMAIL || '');
   const password = process.env.BOOTSTRAP_PASSWORD || '';
@@ -240,7 +250,7 @@ authRouter.get('/me', (req, res) => {
 authRouter.post('/register', (req, res) => {
   if (!registrationOpen()) {
     return res.status(403).json({
-      error: 'Cadastro fechado. Peça ao administrador ou defina ALLOW_REGISTER=true.',
+      error: 'Cadastro fechado pelo administrador (ALLOW_REGISTER=false).',
     });
   }
 

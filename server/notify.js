@@ -1,22 +1,32 @@
 import { spawn } from 'node:child_process';
 import { getSettings } from './db.js';
 
+/** @type {Set<{ res: import('express').Response, userId: string|null }>} */
 const sseClients = new Set();
 
-export function addSseClient(res) {
-  sseClients.add(res);
+export function addSseClient(res, userId = null) {
+  const client = { res, userId };
+  sseClients.add(client);
   res.write(`event: ready\ndata: ${JSON.stringify({ ok: true })}\n\n`);
+  return client;
 }
 
-export function removeSseClient(res) {
-  sseClients.delete(res);
+export function removeSseClient(clientOrRes) {
+  if (clientOrRes && clientOrRes.res) {
+    sseClients.delete(clientOrRes);
+    return;
+  }
+  for (const client of sseClients) {
+    if (client.res === clientOrRes) sseClients.delete(client);
+  }
 }
 
-export function broadcast(event, data) {
+export function broadcast(event, data, { userId } = {}) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const client of sseClients) {
+    if (userId && client.userId && client.userId !== userId) continue;
     try {
-      client.write(payload);
+      client.res.write(payload);
     } catch {
       sseClients.delete(client);
     }
@@ -27,8 +37,8 @@ function canUseDesktopNotify() {
   return Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY || process.env.DBUS_SESSION_BUS_ADDRESS);
 }
 
-export function notifyDesktop({ title, body, url }) {
-  const settings = getSettings();
+export function notifyDesktop({ title, body, url, userId }) {
+  const settings = getSettings(userId);
   if (!settings.desktopNotifications) return false;
   if (!canUseDesktopNotify()) return false;
 
@@ -61,11 +71,12 @@ export function notifyChange({ monitor, event }) {
     at: new Date().toISOString(),
   };
 
-  broadcast('change', payload);
-  notifyDesktop({ title, body, url: monitor.url });
+  broadcast('change', payload, { userId: monitor.userId || null });
+  notifyDesktop({ title, body, url: monitor.url, userId: monitor.userId || null });
   return payload;
 }
 
 export function notifyStatus(message, extra = {}) {
-  broadcast('status', { message, ...extra, at: new Date().toISOString() });
+  const userId = extra.userId || null;
+  broadcast('status', { message, ...extra, at: new Date().toISOString() }, { userId });
 }

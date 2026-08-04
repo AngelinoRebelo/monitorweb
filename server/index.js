@@ -3,13 +3,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import routes from './routes.js';
 import { startScheduler } from './scheduler.js';
-import { DATA_DIR } from './db.js';
+import { DATA_DIR, claimOrphanData } from './db.js';
 import {
   attachUser,
   requireAuth,
   requirePageAuth,
   authRouter,
   bootstrapAdminFromEnv,
+  getOldestUserId,
 } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -56,6 +57,15 @@ app.use((req, res, next) => {
 });
 
 bootstrapAdminFromEnv();
+const ownerId = getOldestUserId();
+if (ownerId) {
+  const claimed = claimOrphanData(ownerId);
+  if (claimed.monitors || claimed.events) {
+    console.log(
+      `[auth] Dados antigos atribuídos ao admin: ${claimed.monitors} monitores, ${claimed.events} eventos`
+    );
+  }
+}
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`MonitorWeb ouvindo em http://0.0.0.0:${PORT}`);

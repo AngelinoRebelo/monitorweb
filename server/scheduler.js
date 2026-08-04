@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { listMonitors, getMonitor } from './db.js';
+import { listAllMonitors, getMonitor } from './db.js';
 import { checkMonitor } from './monitor.js';
 import { notifyChange, notifyStatus } from './notify.js';
 
@@ -17,7 +17,11 @@ async function executeCheck(id, reason = 'schedule') {
     const monitor = getMonitor(id);
     if (!monitor || !monitor.enabled) return;
 
-    notifyStatus(`Verificando: ${monitor.name}`, { monitorId: id, reason });
+    notifyStatus(`Verificando: ${monitor.name}`, {
+      monitorId: id,
+      reason,
+      userId: monitor.userId || null,
+    });
     const result = await checkMonitor(id, {
       previousContent: monitor.lastContent || '',
     });
@@ -27,13 +31,16 @@ async function executeCheck(id, reason = 'schedule') {
     } else {
       notifyStatus(`OK: ${monitor.name}`, {
         monitorId: id,
+        userId: monitor.userId || null,
         status: result.monitor?.lastStatus,
         error: result.error || result.monitor?.lastError || null,
       });
     }
   } catch (err) {
+    const monitor = getMonitor(id);
     notifyStatus(`Erro ao verificar monitor`, {
       monitorId: id,
+      userId: monitor?.userId || null,
       error: err.message || String(err),
     });
   } finally {
@@ -102,14 +109,14 @@ export function unscheduleMonitor(id) {
 
 export function rescheduleAll() {
   for (const id of [...jobs.keys()]) unscheduleMonitor(id);
-  for (const monitor of listMonitors()) scheduleMonitor(monitor);
+  for (const monitor of listAllMonitors()) scheduleMonitor(monitor);
 }
 
 export function startScheduler() {
   rescheduleAll();
   // staggered first pass to avoid flooding targets like SEI
   setTimeout(async () => {
-    const monitors = listMonitors().filter((m) => m.enabled);
+    const monitors = listAllMonitors().filter((m) => m.enabled);
     for (const [index, monitor] of monitors.entries()) {
       setTimeout(() => {
         runCheck(monitor.id, 'startup');

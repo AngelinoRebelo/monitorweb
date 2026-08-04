@@ -5,13 +5,16 @@ import { randomUUID } from 'node:crypto';
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'store.json');
 
+const defaultSettings = () => ({
+  desktopNotifications: true,
+  browserNotifications: true,
+});
+
 const defaultStore = () => ({
   monitors: [],
   events: [],
-  settings: {
-    desktopNotifications: true,
-    browserNotifications: true,
-  },
+  settings: defaultSettings(),
+  settingsByUser: {},
 });
 
 function ensureDir() {
@@ -41,30 +44,82 @@ function write(store) {
   fs.renameSync(tmp, DB_FILE);
 }
 
-export function getSettings() {
-  return read().settings;
+/** Assign orphan monitors/events (pre-multiuser) to the given owner. */
+export function claimOrphanData(userId) {
+  if (!userId) return { monitors: 0, events: 0 };
+  const store = read();
+  let monitors = 0;
+  let events = 0;
+  for (const m of store.monitors) {
+    if (!m.userId) {
+      m.userId = userId;
+      monitors += 1;
+    }
+  }
+  for (const e of store.events) {
+    if (!e.userId) {
+      const owner = store.monitors.find((m) => m.id === e.monitorId)?.userId || userId;
+      e.userId = owner;
+      events += 1;
+    }
+  }
+  if (monitors || events) write(store);
+  return { monitors, events };
 }
 
-export function updateSettings(patch) {
+export function getSettings(userId) {
   const store = read();
-  store.settings = { ...store.settings, ...patch };
+  if (userId && store.settingsByUser?.[userId]) {
+    return { ...defaultSettings(), ...store.settingsByUser[userId] };
+  }
+  return { ...defaultSettings(), ...(store.settings || {}) };
+}
+
+export function updateSettings(userId, patch) {
+  const store = read();
+  if (!store.settingsByUser) store.settingsByUser = {};
+  if (userId) {
+    store.settingsByUser[userId] = {
+      ...defaultSettings(),
+      ...store.settingsByUser[userId],
+      ...patch,
+    };
+    write(store);
+    return store.settingsByUser[userId];
+  }
+  store.settings = { ...defaultSettings(), ...store.settings, ...patch };
   write(store);
   return store.settings;
 }
 
-export function listMonitors() {
-  return read().monitors.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+export function listMonitors({ userId } = {}) {
+  let monitors = read().monitors;
+  if (userId) monitors = monitors.filter((m) => m.userId === userId);
+  return monitors.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function listAllMonitors() {
+  return read().monitors.slice();
 }
 
 export function getMonitor(id) {
   return read().monitors.find((m) => m.id === id) || null;
 }
 
-export function createMonitor({ name, url, intervalMinutes = 5, selector = '', enabled = true }) {
+export function createMonitor({
+  userId,
+  name,
+  url,
+  intervalMinutes = 5,
+  selector = '',
+  enabled = true,
+}) {
+  if (!userId) throw new Error('userId é obrigatório');
   const store = read();
   const now = new Date().toISOString();
   const monitor = {
     id: randomUUID(),
+    userId,
     name: name?.trim() || new URL(url).hostname,
     url: url.trim(),
     intervalMinutes: Math.max(1, Number(intervalMinutes) || 5),
@@ -88,10 +143,16 @@ export function updateMonitor(id, patch) {
   const idx = store.monitors.findIndex((m) => m.id === id);
   if (idx < 0) return null;
   const current = store.monitors[idx];
+  const safe = { ...patch };
+  delete safe.id;
+  delete safe.userId;
+  delete safe.createdAt;
+  delete safe.lastContent;
   store.monitors[idx] = {
     ...current,
-    ...patch,
+    ...safe,
     id: current.id,
+    userId: current.userId,
     createdAt: current.createdAt,
     updatedAt: new Date().toISOString(),
   };
@@ -131,6 +192,7 @@ export function saveCheckResult(
   if (changed) {
     store.events.unshift({
       id: randomUUID(),
+      userId: monitor.userId || null,
       monitorId: id,
       monitorName: monitor.name,
       url: monitor.url,
@@ -142,15 +204,23 @@ export function saveCheckResult(
       changes: Array.isArray(changes) ? changes : [],
       contentPreview: (content || '').slice(0, 4000),
     });
-    store.events = store.events.slice(0, 200);
+    store.events = store.events.slice(0, 500);
   }
 
   write(store);
   return { monitor: store.monitors[idx], event: changed ? store.events[0] : null };
 }
 
-export function listEvents({ monitorId, limit = 50 } = {}) {
+export function listEvents({ userId, monitorId, limit = 50 } = {}) {
   let events = read().events;
+  if (userId) {
+    const mine = new Set(
+      read()
+        .monitors.filter((m) => m.userId === userId)
+        .map((m) => m.id)
+    );
+    events = events.filter((e) => e.userId === userId || mine.has(e.monitorId));
+  }
   if (monitorId) events = events.filter((e) => e.monitorId === monitorId);
   return events.slice(0, limit);
 }

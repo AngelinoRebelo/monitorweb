@@ -38,7 +38,7 @@ function setMode(next) {
   els.lead.textContent =
     mode === 'login'
       ? 'Use seu e-mail e senha para acessar o painel.'
-      : 'Cadastre o e-mail e uma senha para proteger o MonitorWeb.';
+      : 'Crie sua conta. Seus monitores ficam separados dos de outros usuários.';
   els.submit.textContent = mode === 'login' ? 'Entrar' : 'Cadastrar';
   els.password.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
   els.error.hidden = true;
@@ -84,7 +84,7 @@ els.form.addEventListener('submit', async (e) => {
     registrationOpen = Boolean(status.registrationOpen);
     els.tabRegister.disabled = !registrationOpen;
     els.tabRegister.hidden = !registrationOpen;
-    els.registerHint.hidden = !registrationOpen;
+    if (els.registerHint) els.registerHint.hidden = !registrationOpen;
     if (registrationOpen && !status.hasUsers) setMode('register');
   } catch (err) {
     showError(err.message);
