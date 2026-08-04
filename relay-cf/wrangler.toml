@@ -3,5 +3,10 @@ main = "src/worker.js"
 compatibility_date = "2026-08-04"
 workers_dev = true
 
+# Pin Worker near São Paulo so SEI (gov.br) is reachable even when
+# MonitorWeb calls the relay from Railway US East.
+[placement]
+region = "aws:sa-east-1"
+
 [vars]
 SERVICE_NAME = "monitorweb-relay"

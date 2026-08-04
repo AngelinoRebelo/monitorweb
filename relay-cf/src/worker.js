@@ -76,6 +76,8 @@ export default {
           bodyBase64: bytesToBase64(buf),
           bytes: buf.length,
           relayRegion: 'cloudflare',
+          colo: request.cf?.colo || null,
+          placement: 'aws:sa-east-1',
         });
       } catch (err) {
         return Response.json(

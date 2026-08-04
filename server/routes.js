@@ -60,6 +60,10 @@ router.get('/health/outbound', async (req, res) => {
       contentType: response.headers.get('content-type'),
       bytes: body.length,
       preview: body.replace(/\s+/g, ' ').slice(0, 180),
+      relayConfigured: Boolean(
+        process.env.FETCH_RELAY_URL || process.env.PROXY_URL || process.env.PROXY_RELAY_URL
+      ),
+      fetchRelayUrl: process.env.FETCH_RELAY_URL || process.env.PROXY_URL || null,
     });
   } catch (err) {
     res.status(502).json({
