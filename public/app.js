@@ -34,6 +34,7 @@ let currentUser = null;
 let currentView = 'dashboard';
 let cachedUsers = [];
 const expandedIds = new Set();
+const expandedDashIds = new Set();
 
 const VIEW_TITLES = {
   dashboard: 'Dashboard',
@@ -243,7 +244,7 @@ function renderDashboard() {
   if (!els.dashFeed || !els.dashStats) return;
   const changed = cachedMonitors.filter((m) => m.lastChangedAt).length;
   const errors = cachedMonitors.filter((m) => m.lastStatus === 'error').length;
-  const recent = [...cachedEvents].sort((a, b) => ts(b.createdAt) - ts(a.createdAt)).slice(0, 20);
+  const recent = [...cachedEvents].sort((a, b) => ts(b.createdAt) - ts(a.createdAt)).slice(0, 40);
 
   els.dashStats.innerHTML = `
     <article class="stat-card"><p class="stat-label">Monitores</p><p class="stat-value">${cachedMonitors.length}</p></article>
@@ -257,21 +258,62 @@ function renderDashboard() {
     return;
   }
 
-  els.dashFeed.innerHTML = recent
-    .map(
-      (e) => `
-    <article class="dash-item card" data-event-id="${escapeAttr(e.id)}">
-      <div class="dash-item-main">
-        <strong>${escapeHtml(e.monitorName || 'Monitor')}</strong>
-        <p class="meta">${formatDate(e.createdAt)}</p>
-        <p class="event-summary">${escapeHtml(e.summary || 'Alteração detectada')}</p>
-      </div>
-      <div class="actions">
-        <button class="btn small" data-action="diff" type="button">Ver diff</button>
-        <a class="btn small ghost" href="${escapeAttr(e.url)}" target="_blank" rel="noopener">Abrir</a>
-      </div>
-    </article>`
-    )
+  const groups = new Map();
+  for (const e of recent) {
+    const key = e.monitorId || e.monitorName || e.id;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        id: key,
+        name: e.monitorName || 'Monitor',
+        url: e.url || '',
+        events: [],
+      });
+    }
+    groups.get(key).events.push(e);
+  }
+
+  const ordered = [...groups.values()].sort(
+    (a, b) => ts(b.events[0]?.createdAt) - ts(a.events[0]?.createdAt)
+  );
+
+  els.dashFeed.innerHTML = ordered
+    .map((group) => {
+      const open = expandedDashIds.has(group.id);
+      const latest = group.events[0];
+      return `
+      <article class="card accordion dash-group ${open ? 'is-open' : ''}" data-dash-id="${escapeAttr(group.id)}">
+        <button type="button" class="accordion-trigger" data-action="toggle-dash" aria-expanded="${open}">
+          <span class="chevron" aria-hidden="true"></span>
+          <span class="accordion-title">
+            <strong>${escapeHtml(group.name)}</strong>
+            <span class="accordion-meta">${changesLabel(group.events.length)} · última ${formatDate(latest?.createdAt)}</span>
+          </span>
+        </button>
+        <div class="accordion-summary">
+          <p class="event-summary">${escapeHtml(latest?.summary || 'Alteração detectada')}</p>
+          ${group.url ? `<p class="meta"><a href="${escapeAttr(group.url)}" target="_blank" rel="noopener">${escapeHtml(group.url)}</a></p>` : ''}
+        </div>
+        <div class="accordion-panel" ${open ? '' : 'hidden'}>
+          <div class="events">
+            ${group.events
+              .map(
+                (e) => `
+              <article class="event" data-event-id="${escapeAttr(e.id)}">
+                <div class="event-main">
+                  <p class="event-time">${formatDate(e.createdAt)}</p>
+                  <p class="event-summary">${escapeHtml(e.summary || 'Alteração detectada')}</p>
+                </div>
+                <div class="actions">
+                  <button class="btn small" data-action="diff" type="button">Ver diff</button>
+                  <a class="btn small ghost" href="${escapeAttr(e.url)}" target="_blank" rel="noopener">Abrir</a>
+                </div>
+              </article>`
+              )
+              .join('')}
+          </div>
+        </div>
+      </article>`;
+    })
     .join('');
 }
 
@@ -551,6 +593,16 @@ els.monitors?.addEventListener('click', async (e) => {
 });
 
 els.dashFeed?.addEventListener('click', async (e) => {
+  const toggle = e.target.closest('[data-action="toggle-dash"]');
+  if (toggle) {
+    const id = toggle.closest('[data-dash-id]')?.dataset.dashId;
+    if (!id) return;
+    if (expandedDashIds.has(id)) expandedDashIds.delete(id);
+    else expandedDashIds.add(id);
+    renderDashboard();
+    return;
+  }
+
   const diffBtn = e.target.closest('button[data-action="diff"]');
   if (!diffBtn) return;
   try {
