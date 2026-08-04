@@ -1,14 +1,9 @@
-import dns from 'node:dns';
 import { createHash } from 'node:crypto';
 import * as cheerio from 'cheerio';
 import { createTwoFilesPatch } from 'diff';
 import { getMonitor, saveCheckResult, updateMonitor } from './db.js';
 import { buildHumanChanges } from './humanDiff.js';
-
-dns.setDefaultResultOrder('ipv4first');
-
-const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+import { fetchResponse, decodeResponseBody, formatFetchError } from './fetchPage.js';
 
 const VOLATILE_JSON_KEYS = new Set([
   '_snapshotAt',
@@ -79,82 +74,6 @@ function looksLikeSpaShell(html, text) {
   return appRoots && shortText;
 }
 
-function formatFetchError(err) {
-  const cause = err?.cause;
-  const bits = [];
-  if (err?.name === 'AbortError') return 'Timeout ao buscar a página';
-  if (cause?.code) bits.push(cause.code);
-  if (cause?.message) bits.push(cause.message);
-  else if (err?.message) bits.push(err.message);
-  const msg = bits.filter(Boolean).join(' — ') || 'Falha de rede ao buscar a página';
-  if (/fetch failed/i.test(msg) && !cause?.code) {
-    return 'Falha de rede ao acessar o site (possível bloqueio do servidor de origem ao Railway)';
-  }
-  return msg;
-}
-
-function buildHeaders(url, { accept } = {}) {
-  let origin = '';
-  let referer = '';
-  try {
-    const u = new URL(url);
-    origin = u.origin;
-    referer = `${u.origin}/`;
-  } catch {
-    /* ignore */
-  }
-  return {
-    'User-Agent': USER_AGENT,
-    Accept: accept || 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-    'Cache-Control': 'no-cache',
-    Pragma: 'no-cache',
-    ...(referer ? { Referer: referer } : {}),
-    ...(origin ? { Origin: origin } : {}),
-  };
-}
-
-async function decodeResponseBody(res) {
-  const buf = Buffer.from(await res.arrayBuffer());
-  const ctype = res.headers.get('content-type') || '';
-  const m = ctype.match(/charset\s*=\s*["']?([^;"'\s]+)/i);
-  let encoding = (m?.[1] || 'utf-8').trim().toLowerCase();
-  if (encoding === 'iso-8859-1' || encoding === 'latin1' || encoding === 'windows-1252') {
-    encoding = 'latin1';
-  }
-  try {
-    return new TextDecoder(encoding).decode(buf);
-  } catch {
-    return buf.toString('utf8');
-  }
-}
-
-async function fetchResponse(url, { accept } = {}) {
-  const maxAttempts = 3;
-  let lastError;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45000);
-    try {
-      const res = await fetch(url, {
-        signal: controller.signal,
-        redirect: 'follow',
-        headers: buildHeaders(url, { accept }),
-      });
-      return res;
-    } catch (err) {
-      lastError = err;
-      if (attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 700 * attempt));
-        continue;
-      }
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-  throw lastError;
-}
-
 function gestaoInteligenteRifaApi(pageUrl) {
   try {
     const u = new URL(pageUrl);
@@ -188,8 +107,8 @@ function discoverApiCandidates(pageUrl, html) {
     const knownPath = gestaoInteligenteRifaApi(pageUrl);
     if (knownPath) {
       try {
-        const path = new URL(knownPath).pathname;
-        candidates.push(`${base}${path}`);
+        const pathName = new URL(knownPath).pathname;
+        candidates.push(`${base}${pathName}`);
       } catch {
         /* ignore */
       }
