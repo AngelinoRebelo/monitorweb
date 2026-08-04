@@ -103,9 +103,10 @@ function renderMonitors(monitors) {
       <article class="card" data-id="${m.id}">
         <h3>${escapeHtml(m.name)}</h3>
         <p class="meta"><a href="${escapeAttr(m.url)}" target="_blank" rel="noopener">${escapeHtml(m.url)}</a></p>
-        <p class="meta">A cada ${m.intervalMinutes} min${m.selector ? ` · seletor <code>${escapeHtml(m.selector)}</code>` : ''}</p>
+        <p class="meta">A cada ${m.intervalMinutes} min${m.selector ? ` · seletor <code>${escapeHtml(m.selector)}</code>` : ''}${m.lastContentKind ? ` · fonte <code>${escapeHtml(m.lastContentKind)}</code>` : ''}</p>
+        ${m.lastSourceUrl && m.lastSourceUrl !== m.url ? `<p class="meta">API: <a href="${escapeAttr(m.lastSourceUrl)}" target="_blank" rel="noopener">${escapeHtml(m.lastSourceUrl)}</a></p>` : ''}
         <p class="status ${escapeAttr(m.lastStatus || 'pending')}">${statusLabel(m.lastStatus)} · última checagem ${formatDate(m.lastCheckedAt)}</p>
-        ${m.lastError ? `<p class="meta">Erro: ${escapeHtml(m.lastError)}</p>` : ''}
+        ${m.lastError ? `<p class="meta">Aviso: ${escapeHtml(m.lastError)}</p>` : ''}
         <div class="actions">
           <button class="btn small" data-action="check">Verificar agora</button>
           <button class="btn small" data-action="toggle">${m.enabled ? 'Pausar' : 'Ativar'}</button>
