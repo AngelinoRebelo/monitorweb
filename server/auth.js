@@ -11,6 +11,12 @@ import {
 import { Router } from 'express';
 import { DATA_DIR, countMonitorsByUser, deleteUserData, listMonitors } from './db.js';
 import { unscheduleMonitor } from './scheduler.js';
+import {
+  appBaseUrl,
+  isMailConfigured,
+  mailProvider,
+  sendPasswordResetEmail,
+} from './mail.js';
 
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const COOKIE_NAME = 'mw_session';
@@ -446,19 +452,42 @@ authRouter.post('/change-password', (req, res) => {
   res.json({ ok: true });
 });
 
-/** User requests password recovery. Token is NOT returned (admin delivers/reset). */
-authRouter.post('/forgot', (req, res) => {
+/** User requests password recovery — e-mail is sent when mail is configured. */
+authRouter.post('/forgot', async (req, res) => {
   const email = normalizeEmail(req.body?.email);
+  const mailOk = isMailConfigured();
   const generic = {
     ok: true,
-    message:
-      'Se o e-mail existir, registramos um pedido de recuperação. O administrador pode enviar o link ou redefinir a senha.',
+    mailed: false,
+    message: mailOk
+      ? 'Se o e-mail existir, enviamos um link de recuperação. Verifique a caixa de entrada e o spam.'
+      : 'Se o e-mail existir, registramos o pedido. O administrador pode enviar o link (e-mail ainda não configurado no servidor).',
   };
   if (!isValidEmail(email)) return res.json(generic);
   const user = findUserByEmail(email);
   if (!user || user.active === false) return res.json(generic);
-  createResetTokenForUser(user.id);
-  res.json(generic);
+
+  const { token, expires } = createResetTokenForUser(user.id);
+  const resetUrl = `${appBaseUrl(req)}/reset.html?token=${token}`;
+
+  if (!mailOk) return res.json(generic);
+
+  try {
+    await sendPasswordResetEmail({ to: user.email, resetUrl, expiresAt: expires });
+    return res.json({
+      ok: true,
+      mailed: true,
+      message: 'Se o e-mail existir, enviamos um link de recuperação. Verifique a caixa de entrada e o spam.',
+    });
+  } catch (err) {
+    console.error('[mail] falha ao enviar recuperação:', err?.message || err);
+    return res.json({
+      ok: true,
+      mailed: false,
+      message:
+        'Não foi possível enviar o e-mail agora. O administrador pode gerar o link no painel Admin.',
+    });
+  }
 });
 
 authRouter.get('/reset/validate', (req, res) => {
@@ -498,7 +527,11 @@ adminRouter.get('/users', (_req, res) => {
     .slice()
     .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
     .map(publicUser);
-  res.json({ users, defaultMaxMonitors: DEFAULT_MAX_MONITORS });
+  res.json({
+    users,
+    defaultMaxMonitors: DEFAULT_MAX_MONITORS,
+    mail: { configured: isMailConfigured(), provider: mailProvider() },
+  });
 });
 
 adminRouter.patch('/users/:id', (req, res) => {
@@ -542,16 +575,33 @@ adminRouter.post('/users/:id/password', (req, res) => {
   res.json({ ok: true });
 });
 
-adminRouter.post('/users/:id/reset-link', (req, res) => {
+adminRouter.post('/users/:id/reset-link', async (req, res) => {
   const user = findUserById(req.params.id);
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
   const { token, expires } = createResetTokenForUser(user.id);
-  const base = `${req.protocol}://${req.get('host')}`;
+  const resetUrl = `${appBaseUrl(req)}/reset.html?token=${token}`;
+  const sendEmail = req.body?.sendEmail !== false;
+
+  let mailed = false;
+  let mailError = null;
+  if (sendEmail && isMailConfigured()) {
+    try {
+      await sendPasswordResetEmail({ to: user.email, resetUrl, expiresAt: expires });
+      mailed = true;
+    } catch (err) {
+      mailError = err?.message || String(err);
+      console.error('[mail] falha admin reset-link:', mailError);
+    }
+  }
+
   res.json({
     ok: true,
     email: user.email,
     expiresAt: expires,
-    resetUrl: `${base}/reset.html?token=${token}`,
+    resetUrl,
+    mailed,
+    mailConfigured: isMailConfigured(),
+    mailError,
   });
 });
 

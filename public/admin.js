@@ -81,7 +81,8 @@ function renderUsers(users) {
           <button type="button" class="btn small" data-action="save-limit">Salvar limite</button>
           <button type="button" class="btn small" data-action="toggle">${u.active ? 'Desativar' : 'Ativar'}</button>
           <button type="button" class="btn small" data-action="password">Nova senha</button>
-          <button type="button" class="btn small" data-action="reset-link">Link de recuperação</button>
+          <button type="button" class="btn small" data-action="reset-link">Copiar link</button>
+          <button type="button" class="btn small" data-action="send-email">Enviar e-mail</button>
           ${u.role === 'admin' ? '' : `<button type="button" class="btn small danger" data-action="delete">Excluir</button>`}
         </div>
         <p class="hint reset-link-box" hidden></p>
@@ -97,6 +98,15 @@ async function refresh() {
     return;
   }
   const data = await api('/admin/users');
+  const mailEl = $('#mail-status');
+  if (data.mail?.configured) {
+    mailEl.textContent = `E-mail ativo (${data.mail.provider}). Recuperação envia link automaticamente.`;
+    mailEl.classList.remove('warn-text');
+  } else {
+    mailEl.textContent =
+      'E-mail ainda não configurado no Railway (RESEND_API_KEY ou BREVO_API_KEY + MAIL_FROM).';
+    mailEl.classList.add('warn-text');
+  }
   renderUsers(data.users || []);
 }
 
@@ -134,19 +144,24 @@ $('#users-list').addEventListener('click', async (e) => {
       });
       flash(`Senha de ${user.email} redefinida.`);
     }
-    if (action === 'reset-link') {
+    if (action === 'reset-link' || action === 'send-email') {
       const data = await api(`/admin/users/${id}/reset-link`, {
         method: 'POST',
-        body: '{}',
+        body: JSON.stringify({ sendEmail: action === 'send-email' }),
       });
       const box = card.querySelector('.reset-link-box');
       box.hidden = false;
       box.textContent = data.resetUrl;
-      try {
-        await navigator.clipboard.writeText(data.resetUrl);
-        flash(`Link copiado para ${user.email}. Envie ao usuário.`);
-      } catch {
-        flash(`Link gerado para ${user.email}. Copie abaixo.`);
+      if (action === 'send-email') {
+        if (data.mailed) flash(`E-mail de recuperação enviado para ${user.email}.`);
+        else flash(data.mailError || 'Não foi possível enviar o e-mail. Link gerado abaixo.', true);
+      } else {
+        try {
+          await navigator.clipboard.writeText(data.resetUrl);
+          flash(`Link copiado para ${user.email}.`);
+        } catch {
+          flash(`Link gerado para ${user.email}. Copie abaixo.`);
+        }
       }
     }
     if (action === 'delete') {

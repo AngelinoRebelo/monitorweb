@@ -46,7 +46,7 @@ function setMode(next) {
   const leads = {
     login: 'Use seu e-mail e senha para acessar o painel.',
     register: 'Crie sua conta. Seus monitores ficam separados dos de outros usuários.',
-    forgot: 'Informe o e-mail da conta. O administrador poderá liberar o acesso.',
+    forgot: 'Informe o e-mail da conta. Enviaremos um link para redefinir a senha.',
   };
   const submits = {
     login: 'Entrar',
