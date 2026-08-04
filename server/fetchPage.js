@@ -26,13 +26,12 @@ function isClassicHttpProxy(url) {
 }
 
 function proxyUrl() {
-  const proxy = process.env.PROXY_URL || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
-  if (!proxy) return '';
-  if (process.env.PROXY_URL && !isClassicHttpProxy(process.env.PROXY_URL) && !process.env.FETCH_RELAY_URL) {
-    // PROXY_URL pointing to our HTTPS relay app (no custom port) — handled by relayConfig()
-    return process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
+  // Only classic HTTP(S) proxies (host:port / user:pass@host) go to ProxyAgent.
+  // Our Cloudflare/Fly relay URLs are handled by relayConfig() instead.
+  if (process.env.PROXY_URL && isClassicHttpProxy(process.env.PROXY_URL)) {
+    return process.env.PROXY_URL;
   }
-  return proxy;
+  return process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
 }
 
 function relayConfig() {
@@ -259,38 +258,53 @@ async function fetchWithRelay(url, { accept } = {}) {
   if (!relay) throw new Error('Relay não configurado');
   if (!relay.secret) throw new Error('FETCH_RELAY_SECRET não configurado');
 
-  const res = await undiciFetch(`${relay.base}/v1/fetch`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${relay.secret}`,
-      'X-Relay-Secret': relay.secret,
-    },
-    body: JSON.stringify({ url, accept: accept || undefined }),
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS + 10000),
-  });
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await undiciFetch(`${relay.base}/v1/fetch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${relay.secret}`,
+          'X-Relay-Secret': relay.secret,
+        },
+        body: JSON.stringify({ url, accept: accept || undefined }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS + 15000),
+      });
 
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok || payload.ok === false && !payload.bodyBase64) {
-    throw Object.assign(new Error(payload.error || `Relay HTTP ${res.status}`), {
-      code: 'RELAY_ERROR',
-    });
+      if (res.status === 522 || res.status === 524 || res.status === 520) {
+        throw Object.assign(new Error(`Relay temporariamente indisponível (HTTP ${res.status})`), {
+          code: `HTTP_${res.status}`,
+        });
+      }
+
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok || (payload.ok === false && !payload.bodyBase64)) {
+        throw Object.assign(new Error(payload.error || `Relay HTTP ${res.status}`), {
+          code: 'RELAY_ERROR',
+        });
+      }
+
+      const body = Buffer.from(payload.bodyBase64 || '', 'base64');
+      return {
+        ok: Boolean(payload.ok),
+        status: Number(payload.status) || res.status,
+        statusText: payload.statusText || '',
+        headers: headerMapToGetters({ 'content-type': payload.contentType || 'text/html' }),
+        body,
+        async arrayBuffer() {
+          return body;
+        },
+        async text() {
+          return body.toString('utf8');
+        },
+      };
+    } catch (err) {
+      lastError = err;
+      await new Promise((r) => setTimeout(r, 500 * attempt));
+    }
   }
-
-  const body = Buffer.from(payload.bodyBase64 || '', 'base64');
-  return {
-    ok: Boolean(payload.ok),
-    status: Number(payload.status) || res.status,
-    statusText: payload.statusText || '',
-    headers: headerMapToGetters({ 'content-type': payload.contentType || 'text/html' }),
-    body,
-    async arrayBuffer() {
-      return body;
-    },
-    async text() {
-      return body.toString('utf8');
-    },
-  };
+  throw lastError || new Error('Falha no relay');
 }
 
 async function fetchWithUndici(url, { accept } = {}) {
