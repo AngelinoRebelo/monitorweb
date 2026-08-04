@@ -6,6 +6,8 @@ const els = {
   live: $('#live-pill'),
   btnNotify: $('#btn-notify'),
   btnInstall: $('#btn-install'),
+  btnLogout: $('#btn-logout'),
+  userEmail: $('#user-email'),
   notifyStatus: $('#notify-status'),
   browserNotifications: $('#browserNotifications'),
   desktopNotifications: $('#desktopNotifications'),
@@ -24,9 +26,14 @@ const expandedIds = new Set();
 
 async function api(path, options = {}) {
   const res = await fetch(`/api${path}`, {
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options,
   });
+  if (res.status === 401 && !path.startsWith('/auth/')) {
+    window.location.href = '/login.html';
+    throw new Error('Não autenticado');
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Erro ${res.status}`);
   return data;
@@ -270,7 +277,7 @@ async function refresh() {
 }
 
 function connectSse() {
-  const es = new EventSource('/api/events/stream');
+  const es = new EventSource('/api/events/stream', { withCredentials: true });
   let statusTimer = null;
   es.addEventListener('ready', () => {
     els.live.textContent = 'ao vivo';
@@ -410,8 +417,29 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 
-updateNotifyUi();
-connectSse();
-refresh().catch((err) => {
-  els.monitors.innerHTML = `<p class="empty">Falha ao carregar: ${escapeHtml(err.message)}</p>`;
+els.btnLogout?.addEventListener('click', async () => {
+  try {
+    await api('/auth/logout', { method: 'POST', body: '{}' });
+  } catch {
+    /* ignore */
+  }
+  window.location.href = '/login.html';
 });
+
+updateNotifyUi();
+
+(async () => {
+  try {
+    const me = await api('/auth/me');
+    if (els.userEmail && me.user?.email) {
+      els.userEmail.textContent = me.user.email;
+      els.userEmail.hidden = false;
+    }
+    connectSse();
+    await refresh();
+  } catch (err) {
+    if (!String(err.message).includes('Não autenticado')) {
+      els.monitors.innerHTML = `<p class="empty">Falha ao carregar: ${escapeHtml(err.message)}</p>`;
+    }
+  }
+})();

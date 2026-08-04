@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f2f24" />
+    <meta name="description" content="Entrar no MonitorWeb" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <title>Entrar · MonitorWeb</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Fraunces:opsz,wght@9..144,560;9..144,700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="auth-page">
+    <div class="bg" aria-hidden="true"></div>
+    <main class="auth-shell">
+      <section class="auth-card panel">
+        <div class="brand auth-brand">
+          <span class="mark" aria-hidden="true"></span>
+          <div>
+            <p class="brand-name">MonitorWeb</p>
+            <p class="brand-sub">acesso protegido</p>
+          </div>
+        </div>
+
+        <h1 id="auth-title">Entrar</h1>
+        <p class="lead" id="auth-lead">Use seu e-mail e senha para acessar o painel.</p>
+
+        <div class="auth-tabs" role="tablist">
+          <button type="button" class="auth-tab is-active" data-mode="login" role="tab" aria-selected="true">
+            Entrar
+          </button>
+          <button type="button" class="auth-tab" data-mode="register" role="tab" aria-selected="false" id="tab-register">
+            Cadastrar
+          </button>
+        </div>
+
+        <form id="auth-form" autocomplete="on">
+          <label>
+            E-mail
+            <input id="email" name="email" type="email" required autocomplete="username" placeholder="voce@email.com" />
+          </label>
+          <label>
+            Senha
+            <input
+              id="password"
+              name="password"
+              type="password"
+              required
+              minlength="8"
+              autocomplete="current-password"
+              placeholder="mínimo 8 caracteres"
+            />
+          </label>
+          <p id="auth-error" class="auth-error" hidden></p>
+          <button type="submit" class="btn primary" id="auth-submit">Entrar</button>
+        </form>
+
+        <p class="hint" id="register-hint" hidden>
+          O primeiro cadastro cria a conta administrador. Depois disso o cadastro fica fechado
+          (a menos que <code>ALLOW_REGISTER=true</code>).
+        </p>
+      </section>
+    </main>
+    <script src="/login.js" type="module"></script>
+  </body>
+</html>

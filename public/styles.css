@@ -628,6 +628,82 @@ dialog::backdrop {
   }
 }
 
+.user-email {
+  font-size: 0.85rem;
+  color: var(--muted);
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-page .auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+.auth-card {
+  width: min(420px, 100%);
+  padding: 1.75rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.auth-brand {
+  margin-bottom: 0.25rem;
+}
+
+.auth-card h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.85rem;
+  font-weight: 700;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  padding: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.auth-tab {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  padding: 0.55rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.auth-tab.is-active {
+  background: rgba(212, 162, 76, 0.2);
+  color: var(--ink);
+}
+
+.auth-tab:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.auth-error {
+  margin: 0;
+  color: var(--err);
+  font-size: 0.9rem;
+}
+
+.auth-card form {
+  display: grid;
+  gap: 0.85rem;
+}
+
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;
