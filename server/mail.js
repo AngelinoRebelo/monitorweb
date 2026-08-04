@@ -71,7 +71,13 @@ async function sendWithBrevo({ to, subject, html, text }) {
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(body?.message || JSON.stringify(body) || `Brevo HTTP ${res.status}`);
+    const detail =
+      body?.message ||
+      body?.error ||
+      (Array.isArray(body?.code) ? body.code.join(', ') : body?.code) ||
+      JSON.stringify(body) ||
+      `Brevo HTTP ${res.status}`;
+    throw new Error(detail);
   }
   return { provider: 'brevo', id: body.messageId || null };
 }
@@ -129,6 +135,31 @@ export async function sendPasswordResetEmail({ to, resetUrl, expiresAt }) {
     <p style="font-size:13px;color:#556">Ou copie e cole no navegador:<br/><a href="${resetUrl}">${resetUrl}</a></p>
     <p style="font-size:13px;color:#556">Este link expira em: ${expLabel}</p>
     <p style="font-size:13px;color:#556">Se você não pediu isso, ignore este e-mail.</p>
+  </div>`;
+
+  return sendMail({ to, subject, html, text });
+}
+
+export async function sendChangeNotificationEmail({ to, monitorName, summary, url, appUrl }) {
+  const subject = `MonitorWeb — mudança em ${monitorName}`;
+  const text = [
+    `Detectamos uma alteração no monitor "${monitorName}".`,
+    '',
+    summary || 'Conteúdo alterado',
+    '',
+    url ? `Página: ${url}` : '',
+    appUrl ? `Painel: ${appUrl}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const html = `
+  <div style="font-family:Arial,sans-serif;line-height:1.5;color:#123126;max-width:560px">
+    <h2 style="margin:0 0 12px">Mudança detectada</h2>
+    <p>O monitor <strong>${monitorName}</strong> registrou uma alteração.</p>
+    <p style="background:#f4f1ea;padding:12px 14px;border-radius:10px">${summary || 'Conteúdo alterado'}</p>
+    ${url ? `<p><a href="${url}">Abrir página monitorada</a></p>` : ''}
+    ${appUrl ? `<p><a href="${appUrl}">Abrir Dashboard</a></p>` : ''}
   </div>`;
 
   return sendMail({ to, subject, html, text });

@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
 import { getSettings } from './db.js';
+import { getApprovedEmailNotify } from './auth.js';
+import { appBaseUrl, isMailConfigured, sendChangeNotificationEmail } from './mail.js';
 
 /** @type {Set<{ res: import('express').Response, userId: string|null }>} */
 const sseClients = new Set();
@@ -58,6 +60,23 @@ export function notifyDesktop({ title, body, url, userId }) {
   }
 }
 
+async function notifyEmailChange({ monitor, event, title, body }) {
+  if (!monitor?.userId || !isMailConfigured()) return;
+  const target = getApprovedEmailNotify(monitor.userId);
+  if (!target) return;
+  try {
+    await sendChangeNotificationEmail({
+      to: target.email,
+      monitorName: monitor.name || title,
+      summary: event?.summary || body,
+      url: monitor.url || event?.url,
+      appUrl: `${appBaseUrl()}/#dashboard`,
+    });
+  } catch (err) {
+    console.error('[mail] falha ao notificar alteração:', err?.message || err);
+  }
+}
+
 export function notifyChange({ monitor, event }) {
   const title = `Mudança: ${monitor.name}`;
   const body = event?.summary || 'A página monitorada foi alterada';
@@ -73,6 +92,7 @@ export function notifyChange({ monitor, event }) {
 
   broadcast('change', payload, { userId: monitor.userId || null });
   notifyDesktop({ title, body, url: monitor.url, userId: monitor.userId || null });
+  void notifyEmailChange({ monitor, event, title, body });
   return payload;
 }
 

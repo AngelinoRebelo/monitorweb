@@ -133,6 +133,9 @@ function verifySessionToken(token) {
 }
 
 function normalizeUser(user, { isFirst = false } = {}) {
+  const status = ['off', 'pending', 'approved'].includes(user.emailNotifyStatus)
+    ? user.emailNotifyStatus
+    : 'off';
   return {
     ...user,
     role: user.role === 'admin' || isFirst ? 'admin' : 'user',
@@ -141,6 +144,8 @@ function normalizeUser(user, { isFirst = false } = {}) {
       user.maxMonitors == null || Number.isNaN(Number(user.maxMonitors))
         ? DEFAULT_MAX_MONITORS
         : Math.max(0, Number(user.maxMonitors)),
+    emailNotifyAllowed: user.emailNotifyAllowed === true,
+    emailNotifyStatus: status,
     resetTokenHash: user.resetTokenHash || null,
     resetExpires: user.resetExpires || null,
     resetRequestedAt: user.resetRequestedAt || null,
@@ -188,6 +193,8 @@ function publicUser(user) {
     maxMonitors: user.maxMonitors ?? DEFAULT_MAX_MONITORS,
     createdAt: user.createdAt,
     monitorCount: countMonitorsByUser(user.id),
+    emailNotifyAllowed: user.emailNotifyAllowed === true,
+    emailNotifyStatus: user.emailNotifyStatus || 'off',
     resetPending: Boolean(user.resetTokenHash && user.resetExpires && Date.parse(user.resetExpires) > Date.now()),
     resetRequestedAt: user.resetRequestedAt || null,
   };
@@ -336,6 +343,15 @@ export function getUserQuota(userId) {
   };
 }
 
+/** Used by change notifications to decide if e-mail alerts are active. */
+export function getApprovedEmailNotify(userId) {
+  const user = findUserById(userId);
+  if (!user || user.active === false) return null;
+  if (user.emailNotifyAllowed !== true) return null;
+  if (user.emailNotifyStatus !== 'approved') return null;
+  return { email: user.email, userId: user.id };
+}
+
 export function bootstrapAdminFromEnv() {
   const email = normalizeEmail(process.env.BOOTSTRAP_EMAIL || '');
   const password = process.env.BOOTSTRAP_PASSWORD || '';
@@ -434,6 +450,37 @@ authRouter.post('/login', (req, res) => {
 authRouter.post('/logout', (_req, res) => {
   clearSessionCookie(res);
   res.json({ ok: true });
+});
+
+/** User requests or cancels e-mail change notifications (needs admin approval to activate). */
+authRouter.post('/email-notify', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Não autenticado' });
+  const user = findUserById(req.user.id);
+  if (!user) return res.status(401).json({ error: 'Não autenticado' });
+
+  const want = Boolean(req.body?.enabled);
+  if (!want) {
+    const updated = updateUserRecord(user.id, { emailNotifyStatus: 'off' });
+    return res.json({
+      user: publicUser(updated),
+      message: 'Notificações por e-mail desativadas.',
+    });
+  }
+
+  if (user.emailNotifyAllowed !== true) {
+    return res.status(403).json({
+      error: 'O administrador ainda não liberou notificações por e-mail para sua conta.',
+    });
+  }
+  if (user.emailNotifyStatus === 'approved') {
+    return res.json({ user: publicUser(user), message: 'Notificações por e-mail já estão ativas.' });
+  }
+
+  const updated = updateUserRecord(user.id, { emailNotifyStatus: 'pending' });
+  res.json({
+    user: publicUser(updated),
+    message: 'Pedido enviado. Aguarde a aprovação do administrador.',
+  });
 });
 
 authRouter.post('/change-password', (req, res) => {
@@ -557,6 +604,24 @@ adminRouter.patch('/users/:id', (req, res) => {
       return res.status(409).json({ error: 'E-mail já em uso' });
     }
     patch.email = email;
+  }
+  if (req.body?.emailNotifyAllowed != null) {
+    patch.emailNotifyAllowed = Boolean(req.body.emailNotifyAllowed);
+    if (!patch.emailNotifyAllowed) {
+      patch.emailNotifyStatus = 'off';
+    }
+  }
+  if (req.body?.emailNotifyStatus != null) {
+    const status = String(req.body.emailNotifyStatus);
+    if (!['off', 'pending', 'approved'].includes(status)) {
+      return res.status(400).json({ error: 'Status de e-mail inválido' });
+    }
+    if (status === 'approved' && user.emailNotifyAllowed !== true && patch.emailNotifyAllowed !== true) {
+      return res.status(400).json({
+        error: 'Libere a opção de e-mail antes de aprovar o pedido do usuário.',
+      });
+    }
+    patch.emailNotifyStatus = status;
   }
 
   const updated = updateUserRecord(user.id, patch);

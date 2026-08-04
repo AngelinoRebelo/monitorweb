@@ -13,6 +13,9 @@ const els = {
   notifyStatus: $('#notify-status'),
   browserNotifications: $('#browserNotifications'),
   desktopNotifications: $('#desktopNotifications'),
+  emailNotifications: $('#emailNotifications'),
+  emailNotifyBox: $('#email-notify-box'),
+  emailNotifyStatus: $('#email-notify-status'),
   diffDialog: $('#diff-dialog'),
   diffTitle: $('#diff-title'),
   diffSummary: $('#diff-summary'),
@@ -132,6 +135,32 @@ function setView(view) {
   if (els.viewTitle) els.viewTitle.textContent = VIEW_TITLES[view] || view;
   if (view === 'admin') refreshAdmin().catch((err) => adminFlash(err.message, true));
   if (view === 'dashboard') renderDashboard();
+}
+
+function emailNotifyLabel(status) {
+  return (
+    {
+      off: 'Desativado',
+      pending: 'Aguardando aprovação do admin',
+      approved: 'Aprovado — e-mails ativos',
+    }[status] || status
+  );
+}
+
+function syncEmailNotifyUi(user) {
+  if (!els.emailNotifyBox) return;
+  const allowed = user?.emailNotifyAllowed === true;
+  const status = user?.emailNotifyStatus || 'off';
+  els.emailNotifyBox.hidden = !allowed;
+  if (!allowed) return;
+  if (els.emailNotifications) {
+    els.emailNotifications.checked = status === 'pending' || status === 'approved';
+    els.emailNotifications.disabled = false;
+  }
+  if (els.emailNotifyStatus) {
+    els.emailNotifyStatus.textContent = emailNotifyLabel(status);
+    els.emailNotifyStatus.classList.toggle('warn-text', status === 'pending');
+  }
 }
 
 function updateNotifyUi() {
@@ -427,6 +456,7 @@ function renderUsers(users) {
       const pending = u.resetPending
         ? `<p class="meta warn-text">Recuperação pendente desde ${formatDate(u.resetRequestedAt)}</p>`
         : '';
+      const emailStatus = u.emailNotifyStatus || 'off';
       return `
       <article class="card user-card" data-id="${escapeHtml(u.id)}">
         <div class="user-head">
@@ -443,6 +473,29 @@ function renderUsers(users) {
             <input type="number" min="0" max="1000" class="max-monitors" value="${Number(u.maxMonitors)}" />
           </label>
           <p class="meta usage">Em uso: <strong>${u.monitorCount}</strong> / ${u.maxMonitors}</p>
+        </div>
+        <div class="email-admin-box">
+          <label class="check">
+            <input type="checkbox" class="email-allowed" ${u.emailNotifyAllowed ? 'checked' : ''} />
+            Liberar opção de notificação por e-mail
+          </label>
+          <p class="meta">Pedido do usuário: <strong>${emailNotifyLabel(emailStatus)}</strong></p>
+          <div class="actions wrap">
+            <button type="button" class="btn small" data-action="toggle-email-allow">${
+              u.emailNotifyAllowed ? 'Bloquear e-mail' : 'Liberar e-mail'
+            }</button>
+            ${
+              emailStatus === 'pending'
+                ? `<button type="button" class="btn small" data-action="approve-email">Aprovar e-mail</button>
+                   <button type="button" class="btn small danger" data-action="reject-email">Recusar</button>`
+                : ''
+            }
+            ${
+              emailStatus === 'approved'
+                ? `<button type="button" class="btn small danger" data-action="revoke-email">Revogar e-mail</button>`
+                : ''
+            }
+          </div>
         </div>
         <div class="actions wrap">
           <button type="button" class="btn small" data-action="save-limit">Salvar limite</button>
@@ -627,6 +680,39 @@ els.usersList?.addEventListener('click', async (e) => {
       await api(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ maxMonitors }) });
       adminFlash(`Limite de ${user.email} atualizado.`);
     }
+    if (action === 'toggle-email-allow') {
+      const next = !user.emailNotifyAllowed;
+      await api(`/admin/users/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          emailNotifyAllowed: next,
+          ...(next ? {} : { emailNotifyStatus: 'off' }),
+        }),
+      });
+      adminFlash(
+        next
+          ? `Opção de e-mail liberada para ${user.email}.`
+          : `Opção de e-mail bloqueada para ${user.email}.`
+      );
+    }
+    if (action === 'approve-email') {
+      await api(`/admin/users/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ emailNotifyAllowed: true, emailNotifyStatus: 'approved' }),
+      });
+      adminFlash(`Notificações por e-mail aprovadas para ${user.email}.`);
+    }
+    if (action === 'reject-email' || action === 'revoke-email') {
+      await api(`/admin/users/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ emailNotifyStatus: 'off' }),
+      });
+      adminFlash(
+        action === 'revoke-email'
+          ? `E-mail revogado para ${user.email}.`
+          : `Pedido de e-mail recusado para ${user.email}.`
+      );
+    }
     if (action === 'toggle') {
       await api(`/admin/users/${id}`, {
         method: 'PATCH',
@@ -696,6 +782,21 @@ els.desktopNotifications?.addEventListener('change', async () => {
   });
 });
 
+els.emailNotifications?.addEventListener('change', async () => {
+  try {
+    const data = await api('/auth/email-notify', {
+      method: 'POST',
+      body: JSON.stringify({ enabled: els.emailNotifications.checked }),
+    });
+    currentUser = data.user;
+    syncEmailNotifyUi(currentUser);
+    if (data.message) alert(data.message);
+  } catch (err) {
+    alert(err.message);
+    syncEmailNotifyUi(currentUser);
+  }
+});
+
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredInstall = e;
@@ -736,6 +837,7 @@ updateNotifyUi();
     if (els.navAdmin && me.user?.role === 'admin') {
       els.navAdmin.classList.remove('hidden');
     }
+    syncEmailNotifyUi(me.user);
     if (els.quotaHint && me.quota) {
       els.quotaHint.hidden = false;
       els.quotaHint.textContent = `Sites: ${me.quota.used} de ${me.quota.maxMonitors} disponíveis.`;

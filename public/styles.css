@@ -206,9 +206,22 @@ body {
   min-width: 0;
 }
 
-.admin-embed {
-  max-width: 960px;
+.email-admin-box {
+  margin: 0.75rem 0 1rem;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.16);
+  display: grid;
+  gap: 0.55rem;
 }
+
+.email-notify-box {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--line);
+}
+
 
 .brand {
   display: flex;
