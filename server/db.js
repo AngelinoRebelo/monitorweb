@@ -98,6 +98,24 @@ export function listMonitors({ userId } = {}) {
   return monitors.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+export function countMonitorsByUser(userId) {
+  if (!userId) return 0;
+  return read().monitors.filter((m) => m.userId === userId).length;
+}
+
+export function deleteUserData(userId) {
+  if (!userId) return { monitors: 0, events: 0 };
+  const store = read();
+  const monitorIds = new Set(store.monitors.filter((m) => m.userId === userId).map((m) => m.id));
+  const beforeM = store.monitors.length;
+  const beforeE = store.events.length;
+  store.monitors = store.monitors.filter((m) => m.userId !== userId);
+  store.events = store.events.filter((e) => e.userId !== userId && !monitorIds.has(e.monitorId));
+  if (store.settingsByUser?.[userId]) delete store.settingsByUser[userId];
+  write(store);
+  return { monitors: beforeM - store.monitors.length, events: beforeE - store.events.length };
+}
+
 export function listAllMonitors() {
   return read().monitors.slice();
 }

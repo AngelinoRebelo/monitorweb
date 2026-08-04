@@ -37,6 +37,9 @@
           <button type="button" class="auth-tab" data-mode="register" role="tab" aria-selected="false" id="tab-register">
             Cadastrar
           </button>
+          <button type="button" class="auth-tab" data-mode="forgot" role="tab" aria-selected="false" id="tab-forgot">
+            Recuperar
+          </button>
         </div>
 
         <form id="auth-form" autocomplete="on">
@@ -44,7 +47,7 @@
             E-mail
             <input id="email" name="email" type="email" required autocomplete="username" placeholder="voce@email.com" />
           </label>
-          <label>
+          <label id="password-field">
             Senha
             <input
               id="password"
@@ -57,12 +60,17 @@
             />
           </label>
           <p id="auth-error" class="auth-error" hidden></p>
+          <p id="auth-ok" class="hint" hidden></p>
           <button type="submit" class="btn primary" id="auth-submit">Entrar</button>
         </form>
 
         <p class="hint" id="register-hint">
           Crie sua conta para cadastrar e acompanhar seus próprios sites. Cada usuário vê só os
           monitores dele.
+        </p>
+        <p class="hint" id="forgot-hint" hidden>
+          Sem e-mail automático: o administrador recebe o pedido e pode gerar um link de redefinição
+          ou definir uma nova senha no painel Admin.
         </p>
       </section>
     </main>

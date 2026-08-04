@@ -7,7 +7,9 @@ const els = {
   btnNotify: $('#btn-notify'),
   btnInstall: $('#btn-install'),
   btnLogout: $('#btn-logout'),
+  btnAdmin: $('#btn-admin'),
   userEmail: $('#user-email'),
+  quotaHint: $('#quota-hint'),
   notifyStatus: $('#notify-status'),
   browserNotifications: $('#browserNotifications'),
   desktopNotifications: $('#desktopNotifications'),
@@ -313,6 +315,15 @@ els.form.addEventListener('submit', async (e) => {
     els.form.reset();
     $('#intervalMinutes').value = '5';
     $('#enabled').checked = true;
+    try {
+      const me = await api('/auth/me');
+      if (els.quotaHint && me.quota) {
+        els.quotaHint.hidden = false;
+        els.quotaHint.textContent = `Sites: ${me.quota.used} de ${me.quota.maxMonitors} disponíveis.`;
+      }
+    } catch {
+      /* ignore */
+    }
     await refresh();
   } catch (err) {
     alert(err.message);
@@ -434,6 +445,13 @@ updateNotifyUi();
     if (els.userEmail && me.user?.email) {
       els.userEmail.textContent = me.user.email;
       els.userEmail.hidden = false;
+    }
+    if (els.btnAdmin && me.user?.role === 'admin') {
+      els.btnAdmin.classList.remove('hidden');
+    }
+    if (els.quotaHint && me.quota) {
+      els.quotaHint.hidden = false;
+      els.quotaHint.textContent = `Sites: ${me.quota.used} de ${me.quota.maxMonitors} disponíveis.`;
     }
     connectSse();
     await refresh();

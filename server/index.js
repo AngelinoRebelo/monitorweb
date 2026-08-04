@@ -9,8 +9,10 @@ import {
   requireAuth,
   requirePageAuth,
   authRouter,
+  adminRouter,
   bootstrapAdminFromEnv,
   getOldestUserId,
+  ensureUserRoles,
 } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -22,8 +24,10 @@ const PORT = Number(process.env.PORT) || 3000;
 
 const PUBLIC_FILES = new Set([
   '/login.html',
-  '/styles.css',
   '/login.js',
+  '/reset.html',
+  '/reset.js',
+  '/styles.css',
   '/icon.svg',
   '/manifest.json',
   '/sw.js',
@@ -35,13 +39,18 @@ app.use(express.json({ limit: '1mb' }));
 app.use(attachUser);
 
 app.use('/api/auth', authRouter);
+app.use('/api/admin', requireAuth, adminRouter);
 app.use('/api', requireAuth, routes);
 
 app.use((req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
   if (PUBLIC_FILES.has(req.path)) return next();
   if (req.path.startsWith('/api')) return next();
-  // Assets under / but not the SPA shell still need auth for index.
+  if (req.path === '/admin.html' || req.path === '/admin.js') {
+    if (!req.user) return res.redirect('/login.html');
+    if (req.user.role !== 'admin') return res.redirect('/');
+    return next();
+  }
   if (req.path === '/' || req.path === '/index.html') {
     return requirePageAuth(req, res, next);
   }
@@ -57,6 +66,7 @@ app.use((req, res, next) => {
 });
 
 bootstrapAdminFromEnv();
+ensureUserRoles();
 const ownerId = getOldestUserId();
 if (ownerId) {
   const claimed = claimOrphanData(ownerId);

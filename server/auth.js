@@ -1,12 +1,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHmac, randomBytes, scryptSync, timingSafeEqual, randomUUID } from 'node:crypto';
+import {
+  createHmac,
+  createHash,
+  randomBytes,
+  scryptSync,
+  timingSafeEqual,
+  randomUUID,
+} from 'node:crypto';
 import { Router } from 'express';
-import { DATA_DIR } from './db.js';
+import { DATA_DIR, countMonitorsByUser, deleteUserData, listMonitors } from './db.js';
+import { unscheduleMonitor } from './scheduler.js';
 
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const COOKIE_NAME = 'mw_session';
 const SESSION_DAYS = 30;
+const RESET_HOURS = 2;
+const DEFAULT_MAX_MONITORS = Number(process.env.DEFAULT_MAX_MONITORS) || 10;
 const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
 function authSecret() {
@@ -30,7 +40,7 @@ function ensureUsersFile() {
   }
 }
 
-function readUsers() {
+function readUsersRaw() {
   ensureUsersFile();
   try {
     const data = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
@@ -76,6 +86,10 @@ function verifyPassword(password, stored) {
   }
 }
 
+function hashToken(token) {
+  return createHash('sha256').update(String(token)).digest('hex');
+}
+
 function b64url(buf) {
   return Buffer.from(buf)
     .toString('base64')
@@ -112,9 +126,65 @@ function verifySessionToken(token) {
   }
 }
 
+function normalizeUser(user, { isFirst = false } = {}) {
+  return {
+    ...user,
+    role: user.role === 'admin' || isFirst ? 'admin' : 'user',
+    active: user.active !== false,
+    maxMonitors:
+      user.maxMonitors == null || Number.isNaN(Number(user.maxMonitors))
+        ? DEFAULT_MAX_MONITORS
+        : Math.max(0, Number(user.maxMonitors)),
+    resetTokenHash: user.resetTokenHash || null,
+    resetExpires: user.resetExpires || null,
+    resetRequestedAt: user.resetRequestedAt || null,
+  };
+}
+
+/** Ensure first account is admin and fill missing fields. */
+export function ensureUserRoles() {
+  const users = readUsersRaw()
+    .slice()
+    .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  if (!users.length) return;
+  let changed = false;
+  const next = users.map((u, i) => {
+    const normalized = normalizeUser(u, { isFirst: i === 0 });
+    if (
+      normalized.role !== u.role ||
+      normalized.active !== u.active ||
+      normalized.maxMonitors !== u.maxMonitors
+    ) {
+      changed = true;
+    }
+    return normalized;
+  });
+  // Keep exactly one "first" admin: if someone else already admin, still promote first if none
+  if (!next.some((u) => u.role === 'admin')) {
+    next[0].role = 'admin';
+    changed = true;
+  }
+  if (changed) writeUsers(next);
+}
+
+function readUsers() {
+  ensureUserRoles();
+  return readUsersRaw().map((u) => normalizeUser(u));
+}
+
 function publicUser(user) {
   if (!user) return null;
-  return { id: user.id, email: user.email, createdAt: user.createdAt };
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role || 'user',
+    active: user.active !== false,
+    maxMonitors: user.maxMonitors ?? DEFAULT_MAX_MONITORS,
+    createdAt: user.createdAt,
+    monitorCount: countMonitorsByUser(user.id),
+    resetPending: Boolean(user.resetTokenHash && user.resetExpires && Date.parse(user.resetExpires) > Date.now()),
+    resetRequestedAt: user.resetRequestedAt || null,
+  };
 }
 
 function findUserById(id) {
@@ -127,7 +197,6 @@ function findUserByEmail(email) {
 }
 
 function registrationOpen() {
-  // Multi-user by default. Set ALLOW_REGISTER=false to lock new signups.
   if (process.env.ALLOW_REGISTER === 'false') return false;
   return true;
 }
@@ -183,12 +252,42 @@ function parseCookies(req) {
   return out;
 }
 
+function updateUserRecord(id, patch) {
+  const users = readUsersRaw();
+  const idx = users.findIndex((u) => u.id === id);
+  if (idx < 0) return null;
+  const current = normalizeUser(users[idx], { isFirst: false });
+  const next = normalizeUser({ ...current, ...patch, id: current.id, email: current.email });
+  users[idx] = next;
+  writeUsers(users.map((u) => normalizeUser(u)));
+  return findUserById(id);
+}
+
+function createResetTokenForUser(userId) {
+  const token = randomBytes(32).toString('hex');
+  const expires = new Date(Date.now() + RESET_HOURS * 60 * 60 * 1000).toISOString();
+  updateUserRecord(userId, {
+    resetTokenHash: hashToken(token),
+    resetExpires: expires,
+    resetRequestedAt: new Date().toISOString(),
+  });
+  return { token, expires };
+}
+
+function clearReset(userId) {
+  updateUserRecord(userId, {
+    resetTokenHash: null,
+    resetExpires: null,
+    resetRequestedAt: null,
+  });
+}
+
 export function attachUser(req, _res, next) {
   const cookies = parseCookies(req);
   const payload = verifySessionToken(cookies[COOKIE_NAME]);
   if (payload) {
     const user = findUserById(payload.uid);
-    if (user) req.user = publicUser(user);
+    if (user && user.active !== false) req.user = publicUser(user);
   }
   next();
 }
@@ -200,18 +299,35 @@ export function requireAuth(req, res, next) {
   return res.status(401).json({ error: 'Não autenticado', code: 'UNAUTHORIZED' });
 }
 
+export function requireAdmin(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'Não autenticado' });
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Acesso restrito ao administrador' });
+  return next();
+}
+
 export function requirePageAuth(req, res, next) {
   if (req.user) return next();
   return res.redirect('/login.html');
 }
 
-export function listUsersPublic() {
-  return readUsers().map(publicUser);
+export function getOldestUserId() {
+  const users = readUsers()
+    .slice()
+    .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  return users[0]?.id || null;
 }
 
-export function getOldestUserId() {
-  const users = readUsers().slice().sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
-  return users[0]?.id || null;
+export function getUserQuota(userId) {
+  const user = findUserById(userId);
+  if (!user) return { maxMonitors: 0, used: 0, remaining: 0, active: false };
+  const used = countMonitorsByUser(userId);
+  const maxMonitors = user.maxMonitors ?? DEFAULT_MAX_MONITORS;
+  return {
+    maxMonitors,
+    used,
+    remaining: Math.max(0, maxMonitors - used),
+    active: user.active !== false,
+  };
 }
 
 export function bootstrapAdminFromEnv() {
@@ -219,24 +335,32 @@ export function bootstrapAdminFromEnv() {
   const password = process.env.BOOTSTRAP_PASSWORD || '';
   if (!email || !password) return;
   if (findUserByEmail(email)) return;
-  const users = readUsers();
-  users.push({
-    id: randomUUID(),
-    email,
-    passwordHash: hashPassword(password),
-    createdAt: new Date().toISOString(),
-  });
+  const users = readUsersRaw();
+  users.push(
+    normalizeUser(
+      {
+        id: randomUUID(),
+        email,
+        passwordHash: hashPassword(password),
+        role: users.length === 0 ? 'admin' : 'user',
+        active: true,
+        maxMonitors: DEFAULT_MAX_MONITORS,
+        createdAt: new Date().toISOString(),
+      },
+      { isFirst: users.length === 0 }
+    )
+  );
   writeUsers(users);
   console.log(`[auth] Usuário bootstrap criado: ${email}`);
 }
 
 export const authRouter = Router();
 
-authRouter.get('/status', (_req, res) => {
+authRouter.get('/status', (req, res) => {
   const users = readUsers();
   res.json({
-    authenticated: Boolean(_req.user),
-    user: _req.user || null,
+    authenticated: Boolean(req.user),
+    user: req.user || null,
     registrationOpen: registrationOpen(),
     hasUsers: users.length > 0,
   });
@@ -244,7 +368,7 @@ authRouter.get('/status', (_req, res) => {
 
 authRouter.get('/me', (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Não autenticado' });
-  res.json({ user: req.user });
+  res.json({ user: req.user, quota: getUserQuota(req.user.id) });
 });
 
 authRouter.post('/register', (req, res) => {
@@ -267,17 +391,24 @@ authRouter.post('/register', (req, res) => {
     return res.status(409).json({ error: 'Este e-mail já está cadastrado' });
   }
 
-  const users = readUsers();
-  const user = {
-    id: randomUUID(),
-    email,
-    passwordHash: hashPassword(password),
-    createdAt: new Date().toISOString(),
-  };
+  const users = readUsersRaw();
+  const isFirst = users.length === 0;
+  const user = normalizeUser(
+    {
+      id: randomUUID(),
+      email,
+      passwordHash: hashPassword(password),
+      role: isFirst ? 'admin' : 'user',
+      active: true,
+      maxMonitors: DEFAULT_MAX_MONITORS,
+      createdAt: new Date().toISOString(),
+    },
+    { isFirst }
+  );
   users.push(user);
-  writeUsers(users);
+  writeUsers(users.map((u, i) => normalizeUser(u, { isFirst: i === 0 && users.length === 1 })));
   setSessionCookie(res, user.id);
-  res.status(201).json({ user: publicUser(user) });
+  res.status(201).json({ user: publicUser(findUserById(user.id)) });
 });
 
 authRouter.post('/login', (req, res) => {
@@ -287,6 +418,9 @@ authRouter.post('/login', (req, res) => {
   if (!user || !verifyPassword(password, user.passwordHash)) {
     return res.status(401).json({ error: 'E-mail ou senha incorretos' });
   }
+  if (user.active === false) {
+    return res.status(403).json({ error: 'Conta desativada. Contate o administrador.' });
+  }
   setSessionCookie(res, user.id);
   res.json({ user: publicUser(user) });
 });
@@ -294,4 +428,148 @@ authRouter.post('/login', (req, res) => {
 authRouter.post('/logout', (_req, res) => {
   clearSessionCookie(res);
   res.json({ ok: true });
+});
+
+authRouter.post('/change-password', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Não autenticado' });
+  const currentPassword = String(req.body?.currentPassword || '');
+  const newPassword = String(req.body?.newPassword || '');
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'Nova senha deve ter pelo menos 8 caracteres' });
+  }
+  const user = findUserById(req.user.id);
+  if (!user || !verifyPassword(currentPassword, user.passwordHash)) {
+    return res.status(401).json({ error: 'Senha atual incorreta' });
+  }
+  updateUserRecord(user.id, { passwordHash: hashPassword(newPassword) });
+  clearReset(user.id);
+  res.json({ ok: true });
+});
+
+/** User requests password recovery. Token is NOT returned (admin delivers/reset). */
+authRouter.post('/forgot', (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  const generic = {
+    ok: true,
+    message:
+      'Se o e-mail existir, registramos um pedido de recuperação. O administrador pode enviar o link ou redefinir a senha.',
+  };
+  if (!isValidEmail(email)) return res.json(generic);
+  const user = findUserByEmail(email);
+  if (!user || user.active === false) return res.json(generic);
+  createResetTokenForUser(user.id);
+  res.json(generic);
+});
+
+authRouter.get('/reset/validate', (req, res) => {
+  const token = String(req.query.token || '');
+  if (!token) return res.status(400).json({ ok: false, error: 'Token inválido' });
+  const hash = hashToken(token);
+  const user = readUsers().find(
+    (u) => u.resetTokenHash === hash && u.resetExpires && Date.parse(u.resetExpires) > Date.now()
+  );
+  if (!user) return res.status(400).json({ ok: false, error: 'Link expirado ou inválido' });
+  res.json({ ok: true, email: user.email });
+});
+
+authRouter.post('/reset', (req, res) => {
+  const token = String(req.body?.token || '');
+  const newPassword = String(req.body?.password || '');
+  if (!token) return res.status(400).json({ error: 'Token inválido' });
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'Senha deve ter pelo menos 8 caracteres' });
+  }
+  const hash = hashToken(token);
+  const user = readUsers().find(
+    (u) => u.resetTokenHash === hash && u.resetExpires && Date.parse(u.resetExpires) > Date.now()
+  );
+  if (!user) return res.status(400).json({ error: 'Link expirado ou inválido' });
+  updateUserRecord(user.id, { passwordHash: hashPassword(newPassword) });
+  clearReset(user.id);
+  res.json({ ok: true, message: 'Senha atualizada. Faça login.' });
+});
+
+export const adminRouter = Router();
+
+adminRouter.use(requireAdmin);
+
+adminRouter.get('/users', (_req, res) => {
+  const users = readUsers()
+    .slice()
+    .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
+    .map(publicUser);
+  res.json({ users, defaultMaxMonitors: DEFAULT_MAX_MONITORS });
+});
+
+adminRouter.patch('/users/:id', (req, res) => {
+  const user = findUserById(req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+  const patch = {};
+  if (req.body?.active != null) patch.active = Boolean(req.body.active);
+  if (req.body?.maxMonitors != null) {
+    patch.maxMonitors = Math.max(0, Math.min(1000, Number(req.body.maxMonitors) || 0));
+  }
+  if (req.body?.role === 'admin' || req.body?.role === 'user') {
+    if (user.id === req.user.id && req.body.role !== 'admin') {
+      return res.status(400).json({ error: 'Você não pode remover seu próprio acesso de admin' });
+    }
+    patch.role = req.body.role;
+  }
+  if (req.body?.email) {
+    const email = normalizeEmail(req.body.email);
+    if (!isValidEmail(email)) return res.status(400).json({ error: 'E-mail inválido' });
+    const other = findUserByEmail(email);
+    if (other && other.id !== user.id) {
+      return res.status(409).json({ error: 'E-mail já em uso' });
+    }
+    patch.email = email;
+  }
+
+  const updated = updateUserRecord(user.id, patch);
+  res.json({ user: publicUser(updated) });
+});
+
+adminRouter.post('/users/:id/password', (req, res) => {
+  const user = findUserById(req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+  const password = String(req.body?.password || '');
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Senha deve ter pelo menos 8 caracteres' });
+  }
+  updateUserRecord(user.id, { passwordHash: hashPassword(password) });
+  clearReset(user.id);
+  res.json({ ok: true });
+});
+
+adminRouter.post('/users/:id/reset-link', (req, res) => {
+  const user = findUserById(req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+  const { token, expires } = createResetTokenForUser(user.id);
+  const base = `${req.protocol}://${req.get('host')}`;
+  res.json({
+    ok: true,
+    email: user.email,
+    expiresAt: expires,
+    resetUrl: `${base}/reset.html?token=${token}`,
+  });
+});
+
+adminRouter.delete('/users/:id', (req, res) => {
+  const user = findUserById(req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+  if (user.id === req.user.id) {
+    return res.status(400).json({ error: 'Você não pode excluir a própria conta' });
+  }
+  if (user.role === 'admin') {
+    const admins = readUsers().filter((u) => u.role === 'admin');
+    if (admins.length <= 1) {
+      return res.status(400).json({ error: 'Não é possível excluir o único administrador' });
+    }
+  }
+  const users = readUsersRaw().filter((u) => u.id !== user.id);
+  for (const m of listMonitors({ userId: user.id })) unscheduleMonitor(m.id);
+  writeUsers(users);
+  const deleted = deleteUserData(user.id);
+  res.json({ ok: true, deleted });
 });

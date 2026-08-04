@@ -16,6 +16,7 @@ import { changesFromDiffText } from './humanDiff.js';
 import { checkMonitor } from './monitor.js';
 import { notifyChange } from './notify.js';
 import { fetchResponse, decodeResponseBody, formatFetchError } from './fetchPage.js';
+import { getUserQuota } from './auth.js';
 
 const router = Router();
 
@@ -101,6 +102,15 @@ router.post('/monitors', (req, res) => {
   const { name, url, intervalMinutes, selector, enabled } = req.body || {};
   if (!url || !isValidUrl(url)) {
     return res.status(400).json({ error: 'URL inválida. Use http:// ou https://' });
+  }
+  const quota = getUserQuota(req.user.id);
+  if (!quota.active) {
+    return res.status(403).json({ error: 'Conta desativada' });
+  }
+  if (quota.remaining <= 0) {
+    return res.status(403).json({
+      error: `Limite de sites atingido (${quota.used}/${quota.maxMonitors}). Peça ao administrador para aumentar.`,
+    });
   }
   const monitor = createMonitor({
     userId: req.user.id,

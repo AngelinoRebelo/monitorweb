@@ -664,12 +664,49 @@ dialog::backdrop {
 
 .auth-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.35rem;
   padding: 0.25rem;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.18);
+}
+
+.admin-layout {
+  padding: 1.25rem 1.5rem 2.5rem;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.users-list {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.user-card .user-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 0.85rem;
+}
+
+.user-grid {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 0.85rem;
+}
+
+.actions.wrap {
+  flex-wrap: wrap;
+}
+
+.reset-link-box {
+  word-break: break-all;
+  margin-top: 0.75rem;
 }
 
 .auth-tab {

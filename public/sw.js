@@ -1,5 +1,5 @@
-const CACHE = 'monitorweb-v5-auth';
-const ASSETS = ['/login.html', '/styles.css', '/login.js', '/manifest.json', '/icon.svg'];
+const CACHE = 'monitorweb-v6-admin';
+const ASSETS = ['/login.html', '/styles.css', '/login.js', '/reset.html', '/reset.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
