@@ -3,7 +3,6 @@ const $ = (sel) => document.querySelector(sel);
 const els = {
   form: $('#monitor-form'),
   monitors: $('#monitors'),
-  events: $('#events'),
   live: $('#live-pill'),
   btnNotify: $('#btn-notify'),
   btnInstall: $('#btn-install'),
@@ -12,11 +11,16 @@ const els = {
   desktopNotifications: $('#desktopNotifications'),
   diffDialog: $('#diff-dialog'),
   diffTitle: $('#diff-title'),
-  diffContent: $('#diff-content'),
+  diffSummary: $('#diff-summary'),
+  diffView: $('#diff-view'),
+  diffClose: $('#diff-close'),
 };
 
 let deferredInstall = null;
 let browserNotifyEnabled = true;
+let cachedMonitors = [];
+let cachedEvents = [];
+const expandedIds = new Set();
 
 async function api(path, options = {}) {
   const res = await fetch(`/api${path}`, {
@@ -91,53 +95,6 @@ function showBrowserNotification(payload) {
   };
 }
 
-function renderMonitors(monitors) {
-  if (!monitors.length) {
-    els.monitors.innerHTML = `<p class="empty">Nenhum monitor ainda. Adicione a primeira URL ao lado.</p>`;
-    return;
-  }
-
-  els.monitors.innerHTML = monitors
-    .map(
-      (m) => `
-      <article class="card" data-id="${m.id}">
-        <h3>${escapeHtml(m.name)}</h3>
-        <p class="meta"><a href="${escapeAttr(m.url)}" target="_blank" rel="noopener">${escapeHtml(m.url)}</a></p>
-        <p class="meta">A cada ${m.intervalMinutes} min${m.selector ? ` · seletor <code>${escapeHtml(m.selector)}</code>` : ''}${m.lastContentKind ? ` · fonte <code>${escapeHtml(m.lastContentKind)}</code>` : ''}</p>
-        ${m.lastSourceUrl && m.lastSourceUrl !== m.url ? `<p class="meta">API: <a href="${escapeAttr(m.lastSourceUrl)}" target="_blank" rel="noopener">${escapeHtml(m.lastSourceUrl)}</a></p>` : ''}
-        <p class="status ${escapeAttr(m.lastStatus || 'pending')}">${statusLabel(m.lastStatus)} · última checagem ${formatDate(m.lastCheckedAt)}</p>
-        ${m.lastError ? `<p class="meta">Aviso: ${escapeHtml(m.lastError)}</p>` : ''}
-        <div class="actions">
-          <button class="btn small" data-action="check">Verificar agora</button>
-          <button class="btn small" data-action="toggle">${m.enabled ? 'Pausar' : 'Ativar'}</button>
-          <button class="btn small danger" data-action="delete">Excluir</button>
-        </div>
-      </article>`
-    )
-    .join('');
-}
-
-function renderEvents(events) {
-  if (!events.length) {
-    els.events.innerHTML = `<p class="empty">Nenhuma alteração registrada ainda.</p>`;
-    return;
-  }
-
-  els.events.innerHTML = events
-    .map(
-      (e) => `
-      <article class="event" data-event-id="${e.id}">
-        <h3>${escapeHtml(e.monitorName)}</h3>
-        <p class="meta">${formatDate(e.createdAt)} · ${escapeHtml(e.summary || 'Alteração')}</p>
-        <div class="actions">
-          <button class="btn small" data-action="diff">Ver diff</button>
-          <a class="btn small ghost" href="${escapeAttr(e.url)}" target="_blank" rel="noopener">Abrir página</a>
-        </div>
-      </article>`
-    )
-    .join('');
-}
-
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -150,14 +107,164 @@ function escapeAttr(value) {
   return escapeHtml(value).replaceAll("'", '&#39;');
 }
 
+function eventsForMonitor(monitorId) {
+  return cachedEvents.filter((e) => e.monitorId === monitorId);
+}
+
+function renderEventItem(e) {
+  return `
+    <article class="event" data-event-id="${e.id}">
+      <div class="event-main">
+        <p class="event-time">${formatDate(e.createdAt)}</p>
+        <p class="event-summary">${escapeHtml(e.summary || 'Alteração detectada')}</p>
+      </div>
+      <div class="actions">
+        <button class="btn small" data-action="diff" type="button">Ver diff</button>
+        <a class="btn small ghost" href="${escapeAttr(e.url)}" target="_blank" rel="noopener">Abrir página</a>
+      </div>
+    </article>`;
+}
+
+function renderMonitors(monitors) {
+  cachedMonitors = monitors;
+  if (!monitors.length) {
+    els.monitors.innerHTML = `<p class="empty">Nenhum monitor ainda. Adicione a primeira URL ao lado.</p>`;
+    return;
+  }
+
+  els.monitors.innerHTML = monitors
+    .map((m) => {
+      const open = expandedIds.has(m.id);
+      const events = eventsForMonitor(m.id);
+      return `
+      <article class="card accordion ${open ? 'is-open' : ''}" data-id="${m.id}">
+        <button type="button" class="accordion-trigger" data-action="toggle-expand" aria-expanded="${open}">
+          <span class="chevron" aria-hidden="true"></span>
+          <span class="accordion-title">
+            <strong>${escapeHtml(m.name)}</strong>
+            <span class="accordion-meta">${events.length} alteração${events.length === 1 ? '' : 'ões'}</span>
+          </span>
+          <span class="status ${escapeAttr(m.lastStatus || 'pending')}">${statusLabel(m.lastStatus)}</span>
+        </button>
+
+        <div class="accordion-summary">
+          <p class="meta"><a href="${escapeAttr(m.url)}" target="_blank" rel="noopener">${escapeHtml(m.url)}</a></p>
+          <p class="meta">A cada ${m.intervalMinutes} min${m.selector ? ` · seletor <code>${escapeHtml(m.selector)}</code>` : ''}${m.lastContentKind ? ` · fonte <code>${escapeHtml(m.lastContentKind)}</code>` : ''}</p>
+          ${m.lastSourceUrl && m.lastSourceUrl !== m.url ? `<p class="meta">API: <a href="${escapeAttr(m.lastSourceUrl)}" target="_blank" rel="noopener">${escapeHtml(m.lastSourceUrl)}</a></p>` : ''}
+          <p class="meta">Última checagem ${formatDate(m.lastCheckedAt)}</p>
+          ${m.lastError ? `<p class="meta warn-text">Aviso: ${escapeHtml(m.lastError)}</p>` : ''}
+          <div class="actions">
+            <button class="btn small" data-action="check" type="button">Verificar agora</button>
+            <button class="btn small" data-action="toggle" type="button">${m.enabled ? 'Pausar' : 'Ativar'}</button>
+            <button class="btn small danger" data-action="delete" type="button">Excluir</button>
+          </div>
+        </div>
+
+        <div class="accordion-panel" ${open ? '' : 'hidden'}>
+          <h4 class="history-title">Alterações deste site</h4>
+          ${
+            events.length
+              ? `<div class="events">${events.map(renderEventItem).join('')}</div>`
+              : `<p class="empty">Nenhuma alteração registrada ainda para este site.</p>`
+          }
+        </div>
+      </article>`;
+    })
+    .join('');
+}
+
+function parseUnifiedDiff(diffText) {
+  const before = [];
+  const after = [];
+  if (!diffText) return { before, after };
+
+  for (const raw of diffText.split('\n')) {
+    if (
+      raw.startsWith('---') ||
+      raw.startsWith('+++') ||
+      raw.startsWith('@@') ||
+      raw.startsWith('Index:') ||
+      raw.startsWith('=====')
+    ) {
+      continue;
+    }
+    if (raw.startsWith('-')) {
+      before.push({ type: 'del', text: raw.slice(1) });
+      after.push({ type: 'empty', text: '' });
+    } else if (raw.startsWith('+')) {
+      before.push({ type: 'empty', text: '' });
+      after.push({ type: 'add', text: raw.slice(1) });
+    } else {
+      const text = raw.startsWith(' ') ? raw.slice(1) : raw;
+      before.push({ type: 'ctx', text });
+      after.push({ type: 'ctx', text });
+    }
+  }
+  return { before, after };
+}
+
+function renderDiffColumn(title, rows, side) {
+  const body = rows.length
+    ? rows
+        .map(
+          (row) =>
+            `<div class="diff-line diff-line--${row.type}"><code>${escapeHtml(row.text || ' ')}</code></div>`
+        )
+        .join('')
+    : `<div class="diff-line diff-line--empty"><code>(vazio)</code></div>`;
+
+  return `
+    <section class="diff-pane diff-pane--${side}">
+      <header class="diff-pane__head">${title}</header>
+      <div class="diff-pane__body">${body}</div>
+    </section>`;
+}
+
+function openDiff(event) {
+  const { before, after } = parseUnifiedDiff(event.diffText || '');
+  els.diffTitle.textContent = `${event.monitorName} · ${formatDate(event.createdAt)}`;
+  els.diffSummary.textContent = event.summary || 'Comparação antes × depois';
+
+  if (!event.diffText && event.contentPreview) {
+    els.diffView.innerHTML = `
+      <section class="diff-pane diff-pane--after diff-pane--solo">
+        <header class="diff-pane__head">Conteúdo capturado</header>
+        <div class="diff-pane__body">
+          <div class="diff-line diff-line--ctx"><code>${escapeHtml(event.contentPreview)}</code></div>
+        </div>
+      </section>`;
+  } else {
+    els.diffView.innerHTML =
+      renderDiffColumn('Antes', before, 'before') + renderDiffColumn('Depois', after, 'after');
+  }
+
+  const panes = els.diffView.querySelectorAll('.diff-pane__body');
+  if (panes.length === 2) {
+    let syncing = false;
+    const sync = (from, to) => {
+      from.addEventListener('scroll', () => {
+        if (syncing) return;
+        syncing = true;
+        to.scrollTop = from.scrollTop;
+        to.scrollLeft = from.scrollLeft;
+        syncing = false;
+      });
+    };
+    sync(panes[0], panes[1]);
+    sync(panes[1], panes[0]);
+  }
+
+  els.diffDialog.showModal();
+}
+
 async function refresh() {
   const [monitors, events, settings] = await Promise.all([
     api('/monitors'),
-    api('/events?limit=40'),
+    api('/events?limit=100'),
     api('/settings'),
   ]);
+  cachedEvents = events;
   renderMonitors(monitors);
-  renderEvents(events);
   els.browserNotifications.checked = settings.browserNotifications !== false;
   els.desktopNotifications.checked = settings.desktopNotifications !== false;
   browserNotifyEnabled = settings.browserNotifications !== false;
@@ -165,6 +272,7 @@ async function refresh() {
 
 function connectSse() {
   const es = new EventSource('/api/events/stream');
+  let statusTimer = null;
   es.addEventListener('ready', () => {
     els.live.textContent = 'ao vivo';
     els.live.classList.add('live');
@@ -172,10 +280,12 @@ function connectSse() {
   es.addEventListener('change', (ev) => {
     const payload = JSON.parse(ev.data);
     showBrowserNotification(payload);
+    if (payload.monitor?.id) expandedIds.add(payload.monitor.id);
     refresh().catch(console.error);
   });
   es.addEventListener('status', () => {
-    refresh().catch(console.error);
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => refresh().catch(console.error), 2500);
   });
   es.onerror = () => {
     els.live.textContent = 'reconectando…';
@@ -204,6 +314,30 @@ els.form.addEventListener('submit', async (e) => {
 });
 
 els.monitors.addEventListener('click', async (e) => {
+  const expandBtn = e.target.closest('[data-action="toggle-expand"]');
+  if (expandBtn) {
+    const card = expandBtn.closest('.card');
+    const id = card?.dataset.id;
+    if (!id) return;
+    if (expandedIds.has(id)) expandedIds.delete(id);
+    else expandedIds.add(id);
+    renderMonitors(cachedMonitors);
+    return;
+  }
+
+  const diffBtn = e.target.closest('button[data-action="diff"]');
+  if (diffBtn) {
+    const id = diffBtn.closest('.event')?.dataset.eventId;
+    if (!id) return;
+    try {
+      const event = await api(`/events/${id}`);
+      openDiff(event);
+    } catch (err) {
+      alert(err.message);
+    }
+    return;
+  }
+
   const btn = e.target.closest('button[data-action]');
   if (!btn) return;
   const card = btn.closest('.card');
@@ -217,8 +351,7 @@ els.monitors.addEventListener('click', async (e) => {
       await api(`/monitors/${id}/check`, { method: 'POST', body: '{}' });
     }
     if (action === 'toggle') {
-      const monitors = await api('/monitors');
-      const m = monitors.find((x) => x.id === id);
+      const m = cachedMonitors.find((x) => x.id === id);
       await api(`/monitors/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({ enabled: !m.enabled }),
@@ -226,6 +359,7 @@ els.monitors.addEventListener('click', async (e) => {
     }
     if (action === 'delete') {
       if (!confirm('Excluir este monitor e seu histórico?')) return;
+      expandedIds.delete(id);
       await api(`/monitors/${id}`, { method: 'DELETE' });
     }
     await refresh();
@@ -236,19 +370,9 @@ els.monitors.addEventListener('click', async (e) => {
   }
 });
 
-els.events.addEventListener('click', async (e) => {
-  const btn = e.target.closest('button[data-action="diff"]');
-  if (!btn) return;
-  const id = btn.closest('.event')?.dataset.eventId;
-  if (!id) return;
-  try {
-    const event = await api(`/events/${id}`);
-    els.diffTitle.textContent = `${event.monitorName} · ${formatDate(event.createdAt)}`;
-    els.diffContent.textContent = event.diffText || event.contentPreview || 'Sem diff disponível.';
-    els.diffDialog.showModal();
-  } catch (err) {
-    alert(err.message);
-  }
+els.diffClose.addEventListener('click', () => els.diffDialog.close());
+els.diffDialog.addEventListener('click', (e) => {
+  if (e.target === els.diffDialog) els.diffDialog.close();
 });
 
 els.btnNotify.addEventListener('click', () => enableBrowserNotifications());

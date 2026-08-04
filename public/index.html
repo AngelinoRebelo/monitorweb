@@ -85,25 +85,22 @@
           <h2>Monitores</h2>
           <span id="live-pill" class="pill">conectando…</span>
         </div>
+        <p class="hint list-hint">Clique no nome do site para expandir o histórico de alterações.</p>
         <div id="monitors" class="cards"></div>
-      </section>
-
-      <section class="panel events-panel">
-        <div class="section-head">
-          <h2>Alterações recentes</h2>
-        </div>
-        <div id="events" class="events"></div>
       </section>
     </main>
 
     <dialog id="diff-dialog">
-      <form method="dialog" class="dialog-body">
+      <div class="dialog-body">
         <header>
-          <h3 id="diff-title">Diff</h3>
-          <button value="close" class="btn ghost">Fechar</button>
+          <div>
+            <h3 id="diff-title">Comparação</h3>
+            <p id="diff-summary" class="diff-summary"></p>
+          </div>
+          <button type="button" id="diff-close" class="btn ghost">Fechar</button>
         </header>
-        <pre id="diff-content"></pre>
-      </form>
+        <div id="diff-view" class="diff-view"></div>
+      </div>
     </dialog>
 
     <script src="/app.js" type="module"></script>
