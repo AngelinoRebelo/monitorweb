@@ -1,0 +1,7 @@
+name = "monitorweb-relay"
+main = "src/worker.js"
+compatibility_date = "2026-08-04"
+workers_dev = true
+
+[vars]
+SERVICE_NAME = "monitorweb-relay"

@@ -14,8 +14,35 @@ const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS) || 20000;
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
 
+function isClassicHttpProxy(url) {
+  try {
+    const u = new URL(url);
+    if (u.username || u.password) return true;
+    if (u.port && !['', '80', '443'].includes(u.port)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function proxyUrl() {
-  return process.env.PROXY_URL || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
+  const proxy = process.env.PROXY_URL || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
+  if (!proxy) return '';
+  if (process.env.PROXY_URL && !isClassicHttpProxy(process.env.PROXY_URL) && !process.env.FETCH_RELAY_URL) {
+    // PROXY_URL pointing to our HTTPS relay app (no custom port) — handled by relayConfig()
+    return process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
+  }
+  return proxy;
+}
+
+function relayConfig() {
+  const explicit = process.env.FETCH_RELAY_URL || process.env.PROXY_RELAY_URL || '';
+  const proxy = process.env.PROXY_URL || '';
+  const fromProxy = proxy && !isClassicHttpProxy(proxy) ? proxy : '';
+  const base = (explicit || fromProxy).replace(/\/$/, '');
+  const secret = process.env.FETCH_RELAY_SECRET || process.env.RELAY_SECRET || '';
+  if (!base) return null;
+  return { base, secret };
 }
 
 function dispatcher() {
@@ -227,6 +254,45 @@ async function fetchWithCurl(url, { accept } = {}) {
   };
 }
 
+async function fetchWithRelay(url, { accept } = {}) {
+  const relay = relayConfig();
+  if (!relay) throw new Error('Relay não configurado');
+  if (!relay.secret) throw new Error('FETCH_RELAY_SECRET não configurado');
+
+  const res = await undiciFetch(`${relay.base}/v1/fetch`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${relay.secret}`,
+      'X-Relay-Secret': relay.secret,
+    },
+    body: JSON.stringify({ url, accept: accept || undefined }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS + 10000),
+  });
+
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || payload.ok === false && !payload.bodyBase64) {
+    throw Object.assign(new Error(payload.error || `Relay HTTP ${res.status}`), {
+      code: 'RELAY_ERROR',
+    });
+  }
+
+  const body = Buffer.from(payload.bodyBase64 || '', 'base64');
+  return {
+    ok: Boolean(payload.ok),
+    status: Number(payload.status) || res.status,
+    statusText: payload.statusText || '',
+    headers: headerMapToGetters({ 'content-type': payload.contentType || 'text/html' }),
+    body,
+    async arrayBuffer() {
+      return body;
+    },
+    async text() {
+      return body.toString('utf8');
+    },
+  };
+}
+
 async function fetchWithUndici(url, { accept } = {}) {
   const res = await undiciFetch(url, {
     redirect: 'follow',
@@ -251,11 +317,10 @@ async function fetchWithUndici(url, { accept } = {}) {
 }
 
 export async function fetchResponse(url, { accept } = {}) {
-  const strategies = [
-    ['https', fetchWithNodeHttp],
-    ['fetch', fetchWithUndici],
-    ['curl', fetchWithCurl],
-  ];
+  const strategies = [];
+  if (relayConfig()) strategies.push(['relay', fetchWithRelay]);
+  // If PROXY_URL points to our relay-style URL by mistake, still try classic paths.
+  strategies.push(['https', fetchWithNodeHttp], ['fetch', fetchWithUndici], ['curl', fetchWithCurl]);
 
   let lastError;
   for (const [name, fn] of strategies) {

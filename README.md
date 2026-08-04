@@ -39,10 +39,19 @@ Variáveis opcionais:
 
 ### SEI / sites do governo
 
-Alguns sites (como `sei.rj.gov.br`) **não respondem a servidores no exterior**. No Railway (EUA) a checagem pode dar timeout. Opções:
+Alguns sites (como `sei.rj.gov.br`) **não respondem a servidores no exterior**. No Railway (EUA) a checagem pode dar timeout.
 
-1. Configurar `PROXY_URL` apontando para um proxy no Brasil
-2. Rodar o MonitorWeb na sua rede local (`npm start`)
+**Solução incluída:** relay em São Paulo (`relay/`, Fly.io região `gru`).
+
+No Railway:
+
+| Variável | Exemplo |
+|----------|---------|
+| `FETCH_RELAY_URL` | `https://monitorweb-relay.fly.dev` |
+| `FETCH_RELAY_SECRET` | mesmo valor de `RELAY_SECRET` do relay |
+| `PROXY_URL` | opcional; proxy HTTP(S) clássico, se preferir |
+
+Veja `relay/README.md` para o deploy.
 
 ## Notificações
 

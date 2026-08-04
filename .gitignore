@@ -7,3 +7,11 @@ data/
 .DS_Store
 npm-debug.log*
 .railway/
+
+relay/.relay_secret
+relay/node_modules/
+
+relay/.relay_secret
+relay/node_modules/
+relay-cf/node_modules/
+relay-cf/.wrangler/
