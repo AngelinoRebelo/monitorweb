@@ -84,9 +84,10 @@ async function notifyEmailChange({ monitor, event, title, body }) {
 export function notifyChange({ monitor, event }) {
   const title = `Mudança: ${monitor.name}`;
   const body = event?.summary || 'A página monitorada foi alterada';
+  const { lastContent, ...safeMonitor } = monitor || {};
   const payload = {
     type: 'change',
-    monitor,
+    monitor: safeMonitor,
     event,
     title,
     body,

@@ -543,26 +543,101 @@ async function refreshAdmin() {
   renderUsers(data.users || []);
 }
 
+function applyMonitorPatch(patch) {
+  if (!patch?.id) return false;
+  const idx = cachedMonitors.findIndex((m) => m.id === patch.id);
+  if (idx < 0) return false;
+  cachedMonitors[idx] = { ...cachedMonitors[idx], ...patch };
+  return true;
+}
+
 function connectSse() {
-  const es = new EventSource('/api/events/stream', { withCredentials: true });
   let statusTimer = null;
-  es.addEventListener('ready', () => {
-    els.live.textContent = 'ao vivo';
-    els.live.classList.add('live');
-  });
-  es.addEventListener('change', (ev) => {
-    const payload = JSON.parse(ev.data);
-    showBrowserNotification(payload);
-    if (payload.monitor?.id) expandedIds.add(payload.monitor.id);
+  let refreshTimer = null;
+  let pollTimer = null;
+  let es = null;
+
+  const scheduleRefresh = (ms = 400) => {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      refresh().catch(console.error);
+    }, ms);
+  };
+
+  const bind = () => {
+    if (es) {
+      try {
+        es.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    es = new EventSource('/api/events/stream', { withCredentials: true });
+
+    es.addEventListener('ready', () => {
+      els.live.textContent = 'ao vivo';
+      els.live.classList.add('live');
+    });
+
+    es.addEventListener('change', (ev) => {
+      let payload = {};
+      try {
+        payload = JSON.parse(ev.data);
+      } catch {
+        /* ignore */
+      }
+      showBrowserNotification(payload);
+      if (payload.monitor?.id) {
+        expandedIds.add(payload.monitor.id);
+        applyMonitorPatch(payload.monitor);
+        if (payload.event) {
+          cachedEvents = [payload.event, ...cachedEvents.filter((e) => e.id !== payload.event.id)];
+        }
+        renderMonitors(cachedMonitors);
+        renderDashboard();
+      }
+      scheduleRefresh(250);
+    });
+
+    es.addEventListener('status', (ev) => {
+      let payload = {};
+      try {
+        payload = JSON.parse(ev.data);
+      } catch {
+        /* ignore */
+      }
+      if (payload.monitor?.id) {
+        applyMonitorPatch(payload.monitor);
+        renderMonitors(cachedMonitors);
+        if (currentView === 'dashboard') renderDashboard();
+      }
+      clearTimeout(statusTimer);
+      statusTimer = setTimeout(() => scheduleRefresh(100), 300);
+    });
+
+    es.onerror = () => {
+      els.live.textContent = 'reconectando…';
+      els.live.classList.remove('live');
+    };
+  };
+
+  bind();
+
+  // Backup polling so the UI never stays stale if SSE drops.
+  pollTimer = setInterval(() => {
+    if (document.hidden) return;
     refresh().catch(console.error);
+  }, 20000);
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refresh().catch(console.error);
   });
-  es.addEventListener('status', () => {
+
+  return () => {
     clearTimeout(statusTimer);
-    statusTimer = setTimeout(() => refresh().catch(console.error), 2500);
-  });
-  es.onerror = () => {
-    els.live.textContent = 'reconectando…';
-    els.live.classList.remove('live');
+    clearTimeout(refreshTimer);
+    clearInterval(pollTimer);
+    es?.close();
   };
 }
 

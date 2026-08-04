@@ -14,7 +14,7 @@ import { scheduleMonitor, unscheduleMonitor, rescheduleAll } from './scheduler.j
 import { addSseClient, removeSseClient } from './notify.js';
 import { changesFromDiffText } from './humanDiff.js';
 import { checkMonitor } from './monitor.js';
-import { notifyChange } from './notify.js';
+import { notifyChange, notifyStatus } from './notify.js';
 import { fetchResponse, decodeResponseBody, formatFetchError } from './fetchPage.js';
 import { getUserQuota } from './auth.js';
 
@@ -169,6 +169,24 @@ router.post('/monitors/:id/check', async (req, res) => {
     });
     if (result.changed && result.event) {
       notifyChange({ monitor: result.monitor, event: result.event });
+    } else {
+      const m = result.monitor || getMonitor(req.params.id);
+      notifyStatus(`OK: ${monitor.name}`, {
+        monitorId: monitor.id,
+        userId: monitor.userId || null,
+        status: m?.lastStatus,
+        error: result.error || m?.lastError || null,
+        monitor: m
+          ? {
+              id: m.id,
+              lastStatus: m.lastStatus,
+              lastCheckedAt: m.lastCheckedAt,
+              lastChangedAt: m.lastChangedAt,
+              lastError: m.lastError,
+              lastContentKind: m.lastContentKind,
+            }
+          : null,
+      });
     }
   } catch (err) {
     return res.status(500).json({ error: formatFetchError(err) });
@@ -187,15 +205,21 @@ router.get('/events', (req, res) => {
 });
 
 router.get('/events/stream', (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
 
   const client = addSseClient(res, req.user.id);
   const heartbeat = setInterval(() => {
-    res.write(': ping\n\n');
-  }, 25000);
+    try {
+      res.write(': ping\n\n');
+    } catch {
+      clearInterval(heartbeat);
+      removeSseClient(client);
+    }
+  }, 15000);
 
   req.on('close', () => {
     clearInterval(heartbeat);

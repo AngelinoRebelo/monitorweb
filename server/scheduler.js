@@ -21,6 +21,13 @@ async function executeCheck(id, reason = 'schedule') {
       monitorId: id,
       reason,
       userId: monitor.userId || null,
+      monitor: {
+        id: monitor.id,
+        lastStatus: 'pending',
+        lastCheckedAt: monitor.lastCheckedAt,
+        lastChangedAt: monitor.lastChangedAt,
+        lastError: monitor.lastError,
+      },
     });
     const result = await checkMonitor(id, {
       previousContent: monitor.lastContent || '',
@@ -29,11 +36,22 @@ async function executeCheck(id, reason = 'schedule') {
     if (result.changed && result.event) {
       notifyChange({ monitor: result.monitor, event: result.event });
     } else {
+      const m = result.monitor || getMonitor(id);
       notifyStatus(`OK: ${monitor.name}`, {
         monitorId: id,
         userId: monitor.userId || null,
-        status: result.monitor?.lastStatus,
-        error: result.error || result.monitor?.lastError || null,
+        status: m?.lastStatus,
+        error: result.error || m?.lastError || null,
+        monitor: m
+          ? {
+              id: m.id,
+              lastStatus: m.lastStatus,
+              lastCheckedAt: m.lastCheckedAt,
+              lastChangedAt: m.lastChangedAt,
+              lastError: m.lastError,
+              lastContentKind: m.lastContentKind,
+            }
+          : null,
       });
     }
   } catch (err) {
@@ -42,6 +60,15 @@ async function executeCheck(id, reason = 'schedule') {
       monitorId: id,
       userId: monitor?.userId || null,
       error: err.message || String(err),
+      monitor: monitor
+        ? {
+            id: monitor.id,
+            lastStatus: 'error',
+            lastCheckedAt: monitor.lastCheckedAt,
+            lastChangedAt: monitor.lastChangedAt,
+            lastError: err.message || String(err),
+          }
+        : null,
     });
   } finally {
     running.delete(id);
