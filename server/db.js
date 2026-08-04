@@ -108,7 +108,10 @@ export function deleteMonitor(id) {
   return before !== store.monitors.length;
 }
 
-export function saveCheckResult(id, { hash, content, status, error, changed, summary, diffText }) {
+export function saveCheckResult(
+  id,
+  { hash, content, status, error, changed, summary, diffText, changes, sourceUrl, contentKind }
+) {
   const store = read();
   const idx = store.monitors.findIndex((m) => m.id === id);
   if (idx < 0) return null;
@@ -131,9 +134,12 @@ export function saveCheckResult(id, { hash, content, status, error, changed, sum
       monitorId: id,
       monitorName: monitor.name,
       url: monitor.url,
+      sourceUrl: sourceUrl || monitor.lastSourceUrl || monitor.url,
+      contentKind: contentKind || monitor.lastContentKind || null,
       createdAt: now,
       summary: summary || 'Conteúdo alterado',
       diffText: diffText || '',
+      changes: Array.isArray(changes) ? changes : [],
       contentPreview: (content || '').slice(0, 4000),
     });
     store.events = store.events.slice(0, 200);

@@ -173,85 +173,74 @@ function renderMonitors(monitors) {
     .join('');
 }
 
-function parseUnifiedDiff(diffText) {
-  const before = [];
-  const after = [];
-  if (!diffText) return { before, after };
-
-  for (const raw of diffText.split('\n')) {
-    if (
-      raw.startsWith('---') ||
-      raw.startsWith('+++') ||
-      raw.startsWith('@@') ||
-      raw.startsWith('Index:') ||
-      raw.startsWith('=====')
-    ) {
-      continue;
-    }
-    if (raw.startsWith('-')) {
-      before.push({ type: 'del', text: raw.slice(1) });
-      after.push({ type: 'empty', text: '' });
-    } else if (raw.startsWith('+')) {
-      before.push({ type: 'empty', text: '' });
-      after.push({ type: 'add', text: raw.slice(1) });
-    } else {
-      const text = raw.startsWith(' ') ? raw.slice(1) : raw;
-      before.push({ type: 'ctx', text });
-      after.push({ type: 'ctx', text });
-    }
+function originLabel(event) {
+  const page = event.url || '';
+  const source = event.sourceUrl || page;
+  const fromApi = source && page && source !== page;
+  if (fromApi) {
+    return `
+      <div class="change-origin">
+        <p><span>Página monitorada</span> <a href="${escapeAttr(page)}" target="_blank" rel="noopener">${escapeHtml(page)}</a></p>
+        <p><span>Origem dos dados</span> <a href="${escapeAttr(source)}" target="_blank" rel="noopener">${escapeHtml(source)}</a></p>
+      </div>`;
   }
-  return { before, after };
+  return `
+    <div class="change-origin">
+      <p><span>Origem</span> <a href="${escapeAttr(source || page)}" target="_blank" rel="noopener">${escapeHtml(source || page || '—')}</a></p>
+    </div>`;
 }
 
-function renderDiffColumn(title, rows, side) {
-  const body = rows.length
-    ? rows
-        .map(
-          (row) =>
-            `<div class="diff-line diff-line--${row.type}"><code>${escapeHtml(row.text || ' ')}</code></div>`
-        )
-        .join('')
-    : `<div class="diff-line diff-line--empty"><code>(vazio)</code></div>`;
-
+function renderChangeItem(item) {
+  if (item.to == null && item.from != null) {
+    return `
+      <div class="change-row">
+        <span class="change-label">${escapeHtml(item.label)}</span>
+        <span class="change-from only">${escapeHtml(item.from)}</span>
+      </div>`;
+  }
+  if (item.from == null && item.to != null) {
+    return `
+      <div class="change-row">
+        <span class="change-label">${escapeHtml(item.label)}</span>
+        <span class="change-to only">${escapeHtml(item.to)}</span>
+      </div>`;
+  }
   return `
-    <section class="diff-pane diff-pane--${side}">
-      <header class="diff-pane__head">${title}</header>
-      <div class="diff-pane__body">${body}</div>
-    </section>`;
+    <div class="change-row">
+      <span class="change-label">${escapeHtml(item.label)}</span>
+      <div class="change-values">
+        <span class="change-from">${escapeHtml(item.from)}</span>
+        <span class="change-arrow" aria-hidden="true">→</span>
+        <span class="change-to">${escapeHtml(item.to)}</span>
+      </div>
+    </div>`;
+}
+
+function renderChangeGroup(group) {
+  return `
+    <article class="change-card">
+      <h4>${escapeHtml(group.title)}</h4>
+      <div class="change-rows">
+        ${(group.items || []).map(renderChangeItem).join('')}
+      </div>
+    </article>`;
 }
 
 function openDiff(event) {
-  const { before, after } = parseUnifiedDiff(event.diffText || '');
+  const changes = Array.isArray(event.changes) ? event.changes : [];
   els.diffTitle.textContent = `${event.monitorName} · ${formatDate(event.createdAt)}`;
-  els.diffSummary.textContent = event.summary || 'Comparação antes × depois';
+  els.diffSummary.textContent = event.summary || 'Alterações detectadas';
 
-  if (!event.diffText && event.contentPreview) {
+  if (!changes.length) {
     els.diffView.innerHTML = `
-      <section class="diff-pane diff-pane--after diff-pane--solo">
-        <header class="diff-pane__head">Conteúdo capturado</header>
-        <div class="diff-pane__body">
-          <div class="diff-line diff-line--ctx"><code>${escapeHtml(event.contentPreview)}</code></div>
-        </div>
-      </section>`;
+      ${originLabel(event)}
+      <p class="empty">Não há detalhes legíveis para esta alteração.</p>`;
   } else {
-    els.diffView.innerHTML =
-      renderDiffColumn('Antes', before, 'before') + renderDiffColumn('Depois', after, 'after');
-  }
-
-  const panes = els.diffView.querySelectorAll('.diff-pane__body');
-  if (panes.length === 2) {
-    let syncing = false;
-    const sync = (from, to) => {
-      from.addEventListener('scroll', () => {
-        if (syncing) return;
-        syncing = true;
-        to.scrollTop = from.scrollTop;
-        to.scrollLeft = from.scrollLeft;
-        syncing = false;
-      });
-    };
-    sync(panes[0], panes[1]);
-    sync(panes[1], panes[0]);
+    els.diffView.innerHTML = `
+      ${originLabel(event)}
+      <div class="change-list">
+        ${changes.map(renderChangeGroup).join('')}
+      </div>`;
   }
 
   els.diffDialog.showModal();

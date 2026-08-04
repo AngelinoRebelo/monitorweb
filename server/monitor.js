@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import * as cheerio from 'cheerio';
 import { createTwoFilesPatch } from 'diff';
 import { getMonitor, saveCheckResult, updateMonitor } from './db.js';
+import { buildHumanChanges } from './humanDiff.js';
 
 const USER_AGENT =
   'Mozilla/5.0 (compatible; MonitorWeb/1.1; +https://github.com/AngelinoRebelo/monitorweb)';
@@ -238,11 +239,13 @@ export async function checkMonitor(id, { previousContent } = {}) {
         : 'Primeira captura registrada'
       : null;
     let diffText = '';
+    let changes = [];
     if (changed) {
       const before = previousContent || '';
       const diff = summarizeDiff(before, content);
       summary = summarizeRifaJson(content) || diff.summary;
       diffText = diff.diffText;
+      changes = buildHumanChanges(before, content);
     } else if (isFirst && kind === 'json') {
       summary = summarizeRifaJson(content) || summary;
     }
@@ -258,6 +261,9 @@ export async function checkMonitor(id, { previousContent } = {}) {
       changed,
       summary,
       diffText,
+      changes,
+      sourceUrl,
+      contentKind: kind,
     });
 
     updateMonitor(id, {

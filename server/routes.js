@@ -12,6 +12,7 @@ import {
 } from './db.js';
 import { runCheck, scheduleMonitor, unscheduleMonitor, rescheduleAll } from './scheduler.js';
 import { addSseClient, removeSseClient } from './notify.js';
+import { changesFromDiffText } from './humanDiff.js';
 
 const router = Router();
 
@@ -123,7 +124,11 @@ router.get('/events/stream', (req, res) => {
 router.get('/events/:id', (req, res) => {
   const event = getEvent(req.params.id);
   if (!event) return res.status(404).json({ error: 'Evento não encontrado' });
-  res.json(event);
+  const changes =
+    Array.isArray(event.changes) && event.changes.length
+      ? event.changes
+      : changesFromDiffText(event.diffText || '');
+  res.json({ ...event, changes });
 });
 
 router.post('/scheduler/reload', (_req, res) => {

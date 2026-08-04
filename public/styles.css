@@ -495,99 +495,112 @@ dialog::backdrop {
 }
 
 .diff-view {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0;
+  display: block;
+  overflow: auto;
+  padding: 1rem 1.1rem 1.25rem;
   min-height: 0;
   flex: 1;
-  overflow: hidden;
 }
 
-.diff-pane {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  border-right: 1px solid var(--line);
+.change-origin {
+  margin-bottom: 1rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.2);
 }
 
-.diff-pane:last-child {
-  border-right: 0;
+.change-origin p {
+  margin: 0.25rem 0;
+  font-size: 0.88rem;
+  color: var(--ink);
+  word-break: break-all;
 }
 
-.diff-pane--solo {
-  grid-column: 1 / -1;
-}
-
-.diff-pane__head {
-  padding: 0.65rem 0.9rem;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.change-origin span {
+  display: inline-block;
+  min-width: 9.5rem;
   color: var(--muted);
-  border-bottom: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.22);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.diff-pane--before .diff-pane__head {
-  color: #f0b2a8;
+.change-origin a {
+  color: var(--accent);
 }
 
-.diff-pane--after .diff-pane__head {
-  color: #9fd9bf;
-}
-
-.diff-pane__body {
-  overflow: auto;
-  max-height: min(68vh, 640px);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.76rem;
-  line-height: 1.45;
-}
-
-.diff-line {
+.change-list {
   display: grid;
-  padding: 0.12rem 0.75rem;
-  border-left: 3px solid transparent;
+  gap: 0.75rem;
 }
 
-.diff-line code {
-  white-space: pre-wrap;
-  word-break: break-word;
-  font: inherit;
-  color: #d7e7dd;
+.change-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.85rem 0.95rem;
+  background: rgba(0, 0, 0, 0.18);
 }
 
-.diff-line--del {
+.change-card h4 {
+  margin: 0 0 0.65rem;
+  font-family: var(--font);
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+.change-rows {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.change-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 140px) 1fr;
+  gap: 0.55rem 0.75rem;
+  align-items: start;
+}
+
+.change-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding-top: 0.15rem;
+}
+
+.change-values {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.55rem;
+}
+
+.change-from,
+.change-to {
+  display: inline-block;
+  padding: 0.28rem 0.55rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.change-from {
   background: rgba(224, 122, 106, 0.16);
-  border-left-color: #e07a6a;
-}
-
-.diff-line--del code {
   color: #ffd4cd;
 }
 
-.diff-line--add {
+.change-to {
   background: rgba(93, 202, 160, 0.14);
-  border-left-color: #5dcaa0;
-}
-
-.diff-line--add code {
   color: #c8f0dc;
 }
 
-.diff-line--empty {
-  background: rgba(255, 255, 255, 0.02);
-  min-height: 1.45em;
+.change-from.only,
+.change-to.only {
+  justify-self: start;
 }
 
-.diff-line--empty code {
-  color: transparent;
-}
-
-.diff-line--ctx code {
-  color: #b7cfc2;
+.change-arrow {
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 @keyframes rise {
@@ -629,21 +642,8 @@ dialog::backdrop {
     align-items: flex-start;
   }
 
-  .diff-view {
+  .change-row {
     grid-template-columns: 1fr;
-  }
-
-  .diff-pane {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .diff-pane:last-child {
-    border-bottom: 0;
-  }
-
-  .diff-pane__body {
-    max-height: 38vh;
   }
 
   .event {
