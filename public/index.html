@@ -17,82 +17,120 @@
     />
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
+  <body class="app-body">
     <div class="bg" aria-hidden="true"></div>
-    <header class="top">
-      <div class="brand">
-        <span class="mark" aria-hidden="true"></span>
-        <div>
-          <p class="brand-name">MonitorWeb</p>
-          <p class="brand-sub">vigilância de páginas · alertas ao vivo</p>
-        </div>
-      </div>
-      <div class="top-actions">
-        <span id="user-email" class="user-email" hidden></span>
-        <a id="btn-admin" class="btn ghost hidden" href="/admin.html">Admin</a>
-        <button type="button" id="btn-notify" class="btn ghost">Ativar notificações</button>
-        <button type="button" id="btn-install" class="btn ghost hidden">Instalar no PC</button>
-        <button type="button" id="btn-logout" class="btn ghost">Sair</button>
-      </div>
-    </header>
 
-    <main class="layout">
-      <section class="panel form-panel">
-        <h1>Novo monitor</h1>
-        <p class="lead">
-          Informe a URL e o intervalo. Em sites SPA (ex.: rifas Gestão Inteligente), o MonitorWeb
-          detecta a API automaticamente. Seletor CSS é opcional para páginas HTML clássicas.
-        </p>
-        <form id="monitor-form">
-          <label>
-            Nome
-            <input id="name" name="name" type="text" placeholder="Ex.: DOERJ — capa" />
-          </label>
-          <label>
-            URL
-            <input id="url" name="url" type="url" required placeholder="https://exemplo.com/pagina" />
-          </label>
-          <div class="row">
-            <label>
-              Intervalo (min)
-              <input id="intervalMinutes" name="intervalMinutes" type="number" min="1" value="5" required />
-            </label>
-            <label>
-              Seletor CSS (opcional)
-              <input id="selector" name="selector" type="text" placeholder="#conteudo, .main, article" />
-            </label>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Navegação">
+        <div class="sidebar-brand">
+          <span class="mark" aria-hidden="true"></span>
+          <div>
+            <p class="brand-name">MonitorWeb</p>
+            <p class="brand-sub">vigilância · alertas</p>
           </div>
-          <label class="check">
-            <input id="enabled" name="enabled" type="checkbox" checked />
-            Ativo imediatamente
-          </label>
-          <button type="submit" class="btn primary">Adicionar monitor</button>
-        </form>
-        <p id="quota-hint" class="hint" hidden></p>
-
-        <div class="settings">
-          <h2>Notificações</h2>
-          <label class="check">
-            <input id="browserNotifications" type="checkbox" checked />
-            Notificações no navegador / PWA
-          </label>
-          <label class="check">
-            <input id="desktopNotifications" type="checkbox" checked />
-            Notificações do sistema (quando rodar local)
-          </label>
-          <p id="notify-status" class="hint">Permissão do navegador: desconhecida</p>
         </div>
-      </section>
 
-      <section class="panel list-panel">
-        <div class="section-head">
-          <h2>Monitores</h2>
+        <nav class="side-nav">
+          <button type="button" class="side-link is-active" data-view="dashboard">Dashboard</button>
+          <button type="button" class="side-link" data-view="monitors">Monitores</button>
+          <button type="button" class="side-link hidden" data-view="admin" id="nav-admin">Admin</button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <span id="user-email" class="user-email" hidden></span>
+          <button type="button" id="btn-notify" class="btn ghost side-btn">Ativar notificações</button>
+          <button type="button" id="btn-install" class="btn ghost side-btn hidden">Instalar no PC</button>
+          <button type="button" id="btn-logout" class="btn ghost side-btn">Sair</button>
+        </div>
+      </aside>
+
+      <div class="app-main">
+        <header class="top top-compact">
+          <h1 class="view-title" id="view-title">Dashboard</h1>
           <span id="live-pill" class="pill">conectando…</span>
-        </div>
-        <p class="hint list-hint">Clique no nome do site para expandir o histórico de alterações.</p>
-        <div id="monitors" class="cards"></div>
-      </section>
-    </main>
+        </header>
+
+        <section id="view-dashboard" class="view">
+          <div class="panel dash-panel">
+            <p class="lead">Resumo das últimas alterações nos seus monitores.</p>
+            <div class="dash-stats" id="dash-stats"></div>
+            <h2 class="dash-heading">Últimas alterações</h2>
+            <div id="dash-feed" class="dash-feed"></div>
+          </div>
+        </section>
+
+        <section id="view-monitors" class="view">
+          <div class="layout">
+            <section class="panel form-panel">
+              <h2>Novo monitor</h2>
+              <p class="lead">
+                Informe a URL e o intervalo. Em sites SPA, o MonitorWeb detecta a API automaticamente.
+              </p>
+              <form id="monitor-form">
+                <label>
+                  Nome
+                  <input id="name" name="name" type="text" placeholder="Ex.: DOERJ — capa" />
+                </label>
+                <label>
+                  URL
+                  <input id="url" name="url" type="url" required placeholder="https://exemplo.com/pagina" />
+                </label>
+                <div class="row">
+                  <label>
+                    Intervalo (min)
+                    <input id="intervalMinutes" name="intervalMinutes" type="number" min="1" value="5" required />
+                  </label>
+                  <label>
+                    Seletor CSS (opcional)
+                    <input id="selector" name="selector" type="text" placeholder="#conteudo, .main, article" />
+                  </label>
+                </div>
+                <label class="check">
+                  <input id="enabled" name="enabled" type="checkbox" checked />
+                  Ativo imediatamente
+                </label>
+                <button type="submit" class="btn primary">Adicionar monitor</button>
+              </form>
+              <p id="quota-hint" class="hint" hidden></p>
+
+              <div class="settings">
+                <h2>Notificações</h2>
+                <label class="check">
+                  <input id="browserNotifications" type="checkbox" checked />
+                  Notificações no navegador / PWA
+                </label>
+                <label class="check">
+                  <input id="desktopNotifications" type="checkbox" checked />
+                  Notificações do sistema (quando rodar local)
+                </label>
+                <p id="notify-status" class="hint">Permissão do navegador: desconhecida</p>
+              </div>
+            </section>
+
+            <section class="panel list-panel">
+              <div class="section-head">
+                <h2>Monitores</h2>
+              </div>
+              <p class="hint list-hint">
+                Ordenados pela última alteração. Clique no nome para ver o histórico.
+              </p>
+              <div id="monitors" class="cards"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="view-admin" class="view">
+          <div class="panel admin-embed">
+            <p class="lead">
+              Gerencie contas, limites de sites, ativação e recuperação de senha.
+            </p>
+            <p id="mail-status" class="hint"></p>
+            <p id="admin-flash" class="hint" hidden></p>
+            <div id="users-list" class="users-list"></div>
+          </div>
+        </section>
+      </div>
+    </div>
 
     <dialog id="diff-dialog">
       <div class="dialog-body">

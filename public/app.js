@@ -7,7 +7,7 @@ const els = {
   btnNotify: $('#btn-notify'),
   btnInstall: $('#btn-install'),
   btnLogout: $('#btn-logout'),
-  btnAdmin: $('#btn-admin'),
+  navAdmin: $('#nav-admin'),
   userEmail: $('#user-email'),
   quotaHint: $('#quota-hint'),
   notifyStatus: $('#notify-status'),
@@ -18,13 +18,28 @@ const els = {
   diffSummary: $('#diff-summary'),
   diffView: $('#diff-view'),
   diffClose: $('#diff-close'),
+  viewTitle: $('#view-title'),
+  dashStats: $('#dash-stats'),
+  dashFeed: $('#dash-feed'),
+  usersList: $('#users-list'),
+  adminFlash: $('#admin-flash'),
+  mailStatus: $('#mail-status'),
 };
 
 let deferredInstall = null;
 let browserNotifyEnabled = true;
 let cachedMonitors = [];
 let cachedEvents = [];
+let currentUser = null;
+let currentView = 'dashboard';
+let cachedUsers = [];
 const expandedIds = new Set();
+
+const VIEW_TITLES = {
+  dashboard: 'Dashboard',
+  monitors: 'Monitores',
+  admin: 'Admin',
+};
 
 async function api(path, options = {}) {
   const res = await fetch(`/api${path}`, {
@@ -64,6 +79,60 @@ function statusLabel(status) {
   );
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value).replaceAll("'", '&#39;');
+}
+
+function ts(value) {
+  const n = Date.parse(value || '');
+  return Number.isFinite(n) ? n : 0;
+}
+
+function sortMonitors(monitors) {
+  return [...monitors].sort((a, b) => {
+    const byChange = ts(b.lastChangedAt) - ts(a.lastChangedAt);
+    if (byChange) return byChange;
+    const byCheck = ts(b.lastCheckedAt) - ts(a.lastCheckedAt);
+    if (byCheck) return byCheck;
+    return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+  });
+}
+
+function eventsForMonitor(monitorId) {
+  return cachedEvents.filter((e) => e.monitorId === monitorId);
+}
+
+function changesLabel(count) {
+  if (count === 1) return '1 alteração';
+  return `${count} alterações`;
+}
+
+function setView(view) {
+  if (view === 'admin' && currentUser?.role !== 'admin') view = 'dashboard';
+  currentView = view;
+  if (location.hash.replace('#', '') !== view) {
+    history.replaceState(null, '', `#${view}`);
+  }
+  document.querySelectorAll('.side-link').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.view === view);
+  });
+  document.querySelectorAll('.view').forEach((section) => {
+    const active = section.id === `view-${view}`;
+    section.classList.toggle('is-active', active);
+  });
+  if (els.viewTitle) els.viewTitle.textContent = VIEW_TITLES[view] || view;
+  if (view === 'admin') refreshAdmin().catch((err) => adminFlash(err.message, true));
+  if (view === 'dashboard') renderDashboard();
+}
+
 function updateNotifyUi() {
   const perm = 'Notification' in window ? Notification.permission : 'unsupported';
   const map = {
@@ -72,7 +141,9 @@ function updateNotifyUi() {
     default: 'ainda não pedida',
     unsupported: 'não suportada neste navegador',
   };
-  els.notifyStatus.textContent = `Permissão do navegador: ${map[perm] || perm}`;
+  if (els.notifyStatus) {
+    els.notifyStatus.textContent = `Permissão do navegador: ${map[perm] || perm}`;
+  }
   els.btnNotify.textContent =
     perm === 'granted' ? 'Notificações ativas' : 'Ativar notificações';
 }
@@ -104,22 +175,6 @@ function showBrowserNotification(payload) {
   };
 }
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
-}
-
-function escapeAttr(value) {
-  return escapeHtml(value).replaceAll("'", '&#39;');
-}
-
-function eventsForMonitor(monitorId) {
-  return cachedEvents.filter((e) => e.monitorId === monitorId);
-}
-
 function renderEventItem(e) {
   return `
     <article class="event" data-event-id="${e.id}">
@@ -135,13 +190,14 @@ function renderEventItem(e) {
 }
 
 function renderMonitors(monitors) {
-  cachedMonitors = monitors;
-  if (!monitors.length) {
+  const ordered = sortMonitors(monitors);
+  cachedMonitors = ordered;
+  if (!ordered.length) {
     els.monitors.innerHTML = `<p class="empty">Nenhum monitor ainda. Adicione a primeira URL ao lado.</p>`;
     return;
   }
 
-  els.monitors.innerHTML = monitors
+  els.monitors.innerHTML = ordered
     .map((m) => {
       const open = expandedIds.has(m.id);
       const events = eventsForMonitor(m.id);
@@ -151,7 +207,7 @@ function renderMonitors(monitors) {
           <span class="chevron" aria-hidden="true"></span>
           <span class="accordion-title">
             <strong>${escapeHtml(m.name)}</strong>
-            <span class="accordion-meta">${events.length} alteração${events.length === 1 ? '' : 'ões'}</span>
+            <span class="accordion-meta">${changesLabel(events.length)}</span>
           </span>
           <span class="status ${escapeAttr(m.lastStatus || 'pending')}">${statusLabel(m.lastStatus)}</span>
         </button>
@@ -160,6 +216,7 @@ function renderMonitors(monitors) {
           <p class="meta"><a href="${escapeAttr(m.url)}" target="_blank" rel="noopener">${escapeHtml(m.url)}</a></p>
           <p class="meta">A cada ${m.intervalMinutes} min${m.selector ? ` · seletor <code>${escapeHtml(m.selector)}</code>` : ''}${m.lastContentKind ? ` · fonte <code>${escapeHtml(m.lastContentKind)}</code>` : ''}</p>
           ${m.lastSourceUrl && m.lastSourceUrl !== m.url ? `<p class="meta">API: <a href="${escapeAttr(m.lastSourceUrl)}" target="_blank" rel="noopener">${escapeHtml(m.lastSourceUrl)}</a></p>` : ''}
+          <p class="meta">Última alteração ${formatDate(m.lastChangedAt)}</p>
           <p class="meta">Última checagem ${formatDate(m.lastCheckedAt)}</p>
           ${m.lastError ? `<p class="meta warn-text">Aviso: ${escapeHtml(m.lastError)}</p>` : ''}
           <div class="actions">
@@ -179,6 +236,42 @@ function renderMonitors(monitors) {
         </div>
       </article>`;
     })
+    .join('');
+}
+
+function renderDashboard() {
+  if (!els.dashFeed || !els.dashStats) return;
+  const changed = cachedMonitors.filter((m) => m.lastChangedAt).length;
+  const errors = cachedMonitors.filter((m) => m.lastStatus === 'error').length;
+  const recent = [...cachedEvents].sort((a, b) => ts(b.createdAt) - ts(a.createdAt)).slice(0, 20);
+
+  els.dashStats.innerHTML = `
+    <article class="stat-card"><p class="stat-label">Monitores</p><p class="stat-value">${cachedMonitors.length}</p></article>
+    <article class="stat-card"><p class="stat-label">Com alteração</p><p class="stat-value">${changed}</p></article>
+    <article class="stat-card"><p class="stat-label">Com erro</p><p class="stat-value">${errors}</p></article>
+    <article class="stat-card"><p class="stat-label">Eventos recentes</p><p class="stat-value">${recent.length}</p></article>
+  `;
+
+  if (!recent.length) {
+    els.dashFeed.innerHTML = `<p class="empty">Nenhuma alteração registrada ainda.</p>`;
+    return;
+  }
+
+  els.dashFeed.innerHTML = recent
+    .map(
+      (e) => `
+    <article class="dash-item card" data-event-id="${escapeAttr(e.id)}">
+      <div class="dash-item-main">
+        <strong>${escapeHtml(e.monitorName || 'Monitor')}</strong>
+        <p class="meta">${formatDate(e.createdAt)}</p>
+        <p class="event-summary">${escapeHtml(e.summary || 'Alteração detectada')}</p>
+      </div>
+      <div class="actions">
+        <button class="btn small" data-action="diff" type="button">Ver diff</button>
+        <a class="btn small ghost" href="${escapeAttr(e.url)}" target="_blank" rel="noopener">Abrir</a>
+      </div>
+    </article>`
+    )
     .join('');
 }
 
@@ -206,15 +299,10 @@ function collectSide(changes, side) {
     for (const item of group.items || []) {
       const value = side === 'before' ? item.from : item.to;
       if (value == null || value === '') continue;
-      if (item.label === 'Antes' || item.label === 'Depois') {
-        lines.push(String(value));
-      } else {
-        lines.push(`${item.label}: ${value}`);
-      }
+      if (item.label === 'Antes' || item.label === 'Depois') lines.push(String(value));
+      else lines.push(`${item.label}: ${value}`);
     }
-    if (lines.length) {
-      blocks.push({ title: group.title, lines });
-    }
+    if (lines.length) blocks.push({ title: group.title, lines });
   }
   return blocks;
 }
@@ -226,9 +314,7 @@ function renderSide(title, blocks, side) {
           (block) => `
         <article class="side-card">
           <h4>${escapeHtml(block.title)}</h4>
-          <ul>
-            ${block.lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
-          </ul>
+          <ul>${block.lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>
         </article>`
         )
         .join('')
@@ -250,9 +336,7 @@ function openDiff(event) {
   const afterBlocks = collectSide(changes, 'after');
 
   if (!beforeBlocks.length && !afterBlocks.length) {
-    els.diffView.innerHTML = `
-      ${originLabel(event)}
-      <p class="empty">Não há detalhes legíveis para esta alteração.</p>`;
+    els.diffView.innerHTML = `${originLabel(event)}<p class="empty">Não há detalhes legíveis para esta alteração.</p>`;
   } else {
     els.diffView.innerHTML = `
       ${originLabel(event)}
@@ -261,7 +345,6 @@ function openDiff(event) {
         ${renderSide('Depois', afterBlocks, 'after')}
       </div>`;
   }
-
   els.diffDialog.showModal();
 }
 
@@ -273,9 +356,78 @@ async function refresh() {
   ]);
   cachedEvents = events;
   renderMonitors(monitors);
-  els.browserNotifications.checked = settings.browserNotifications !== false;
-  els.desktopNotifications.checked = settings.desktopNotifications !== false;
+  renderDashboard();
+  if (els.browserNotifications) {
+    els.browserNotifications.checked = settings.browserNotifications !== false;
+  }
+  if (els.desktopNotifications) {
+    els.desktopNotifications.checked = settings.desktopNotifications !== false;
+  }
   browserNotifyEnabled = settings.browserNotifications !== false;
+}
+
+function adminFlash(message, isError = false) {
+  if (!els.adminFlash) return;
+  els.adminFlash.hidden = false;
+  els.adminFlash.textContent = message;
+  els.adminFlash.classList.toggle('warn-text', isError);
+}
+
+function renderUsers(users) {
+  cachedUsers = users;
+  if (!els.usersList) return;
+  if (!users.length) {
+    els.usersList.innerHTML = `<p class="empty">Nenhum usuário cadastrado.</p>`;
+    return;
+  }
+  els.usersList.innerHTML = users
+    .map((u) => {
+      const pending = u.resetPending
+        ? `<p class="meta warn-text">Recuperação pendente desde ${formatDate(u.resetRequestedAt)}</p>`
+        : '';
+      return `
+      <article class="card user-card" data-id="${escapeHtml(u.id)}">
+        <div class="user-head">
+          <div>
+            <strong>${escapeHtml(u.email)}</strong>
+            <p class="meta">${u.role === 'admin' ? 'Administrador' : 'Usuário'} · desde ${formatDate(u.createdAt)}</p>
+            ${pending}
+          </div>
+          <span class="status ${u.active ? 'ok' : 'error'}">${u.active ? 'ativa' : 'desativada'}</span>
+        </div>
+        <div class="user-grid">
+          <label>
+            Limite de sites
+            <input type="number" min="0" max="1000" class="max-monitors" value="${Number(u.maxMonitors)}" />
+          </label>
+          <p class="meta usage">Em uso: <strong>${u.monitorCount}</strong> / ${u.maxMonitors}</p>
+        </div>
+        <div class="actions wrap">
+          <button type="button" class="btn small" data-action="save-limit">Salvar limite</button>
+          <button type="button" class="btn small" data-action="toggle">${u.active ? 'Desativar' : 'Ativar'}</button>
+          <button type="button" class="btn small" data-action="password">Nova senha</button>
+          <button type="button" class="btn small" data-action="reset-link">Copiar link</button>
+          <button type="button" class="btn small" data-action="send-email">Enviar e-mail</button>
+          ${u.role === 'admin' ? '' : `<button type="button" class="btn small danger" data-action="delete">Excluir</button>`}
+        </div>
+        <p class="hint reset-link-box" hidden></p>
+      </article>`;
+    })
+    .join('');
+}
+
+async function refreshAdmin() {
+  const data = await api('/admin/users');
+  if (els.mailStatus) {
+    if (data.mail?.configured) {
+      els.mailStatus.textContent = `E-mail ativo (${data.mail.provider}).`;
+      els.mailStatus.classList.remove('warn-text');
+    } else {
+      els.mailStatus.textContent = 'E-mail não configurado (BREVO_API_KEY / MAIL_FROM).';
+      els.mailStatus.classList.add('warn-text');
+    }
+  }
+  renderUsers(data.users || []);
 }
 
 function connectSse() {
@@ -301,7 +453,16 @@ function connectSse() {
   };
 }
 
-els.form.addEventListener('submit', async (e) => {
+document.querySelectorAll('.side-link').forEach((btn) => {
+  btn.addEventListener('click', () => setView(btn.dataset.view));
+});
+
+window.addEventListener('hashchange', () => {
+  const view = location.hash.replace('#', '') || 'dashboard';
+  setView(view);
+});
+
+els.form?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const body = {
     name: $('#name').value.trim(),
@@ -325,16 +486,22 @@ els.form.addEventListener('submit', async (e) => {
       /* ignore */
     }
     await refresh();
+    setView('monitors');
   } catch (err) {
     alert(err.message);
   }
 });
 
-els.monitors.addEventListener('click', async (e) => {
+async function handleDiffClick(eventId) {
+  if (!eventId) return;
+  const event = await api(`/events/${eventId}`);
+  openDiff(event);
+}
+
+els.monitors?.addEventListener('click', async (e) => {
   const expandBtn = e.target.closest('[data-action="toggle-expand"]');
   if (expandBtn) {
-    const card = expandBtn.closest('.card');
-    const id = card?.dataset.id;
+    const id = expandBtn.closest('.card')?.dataset.id;
     if (!id) return;
     if (expandedIds.has(id)) expandedIds.delete(id);
     else expandedIds.add(id);
@@ -344,11 +511,8 @@ els.monitors.addEventListener('click', async (e) => {
 
   const diffBtn = e.target.closest('button[data-action="diff"]');
   if (diffBtn) {
-    const id = diffBtn.closest('.event')?.dataset.eventId;
-    if (!id) return;
     try {
-      const event = await api(`/events/${id}`);
-      openDiff(event);
+      await handleDiffClick(diffBtn.closest('.event')?.dataset.eventId);
     } catch (err) {
       alert(err.message);
     }
@@ -357,8 +521,7 @@ els.monitors.addEventListener('click', async (e) => {
 
   const btn = e.target.closest('button[data-action]');
   if (!btn) return;
-  const card = btn.closest('.card');
-  const id = card?.dataset.id;
+  const id = btn.closest('.card')?.dataset.id;
   if (!id) return;
   const action = btn.dataset.action;
 
@@ -387,14 +550,85 @@ els.monitors.addEventListener('click', async (e) => {
   }
 });
 
-els.diffClose.addEventListener('click', () => els.diffDialog.close());
-els.diffDialog.addEventListener('click', (e) => {
+els.dashFeed?.addEventListener('click', async (e) => {
+  const diffBtn = e.target.closest('button[data-action="diff"]');
+  if (!diffBtn) return;
+  try {
+    await handleDiffClick(diffBtn.closest('[data-event-id]')?.dataset.eventId);
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+els.usersList?.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const card = btn.closest('.user-card');
+  const id = card?.dataset.id;
+  if (!id) return;
+  const user = cachedUsers.find((u) => u.id === id);
+  const action = btn.dataset.action;
+  btn.disabled = true;
+  try {
+    if (action === 'save-limit') {
+      const maxMonitors = Number(card.querySelector('.max-monitors').value);
+      await api(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ maxMonitors }) });
+      adminFlash(`Limite de ${user.email} atualizado.`);
+    }
+    if (action === 'toggle') {
+      await api(`/admin/users/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: !user.active }),
+      });
+      adminFlash(`Conta ${user.email} ${user.active ? 'desativada' : 'ativada'}.`);
+    }
+    if (action === 'password') {
+      const password = prompt(`Nova senha para ${user.email} (mín. 8 caracteres):`);
+      if (!password) return;
+      await api(`/admin/users/${id}/password`, { method: 'POST', body: JSON.stringify({ password }) });
+      adminFlash(`Senha de ${user.email} redefinida.`);
+    }
+    if (action === 'reset-link' || action === 'send-email') {
+      const data = await api(`/admin/users/${id}/reset-link`, {
+        method: 'POST',
+        body: JSON.stringify({ sendEmail: action === 'send-email' }),
+      });
+      const box = card.querySelector('.reset-link-box');
+      box.hidden = false;
+      box.textContent = data.resetUrl;
+      if (action === 'send-email') {
+        if (data.mailed) adminFlash(`E-mail enviado para ${user.email}.`);
+        else adminFlash(data.mailError || 'Falha ao enviar e-mail. Link gerado abaixo.', true);
+      } else {
+        try {
+          await navigator.clipboard.writeText(data.resetUrl);
+          adminFlash(`Link copiado para ${user.email}.`);
+        } catch {
+          adminFlash(`Link gerado para ${user.email}.`);
+        }
+      }
+    }
+    if (action === 'delete') {
+      if (!confirm(`Excluir ${user.email} e todos os monitores dele?`)) return;
+      await api(`/admin/users/${id}`, { method: 'DELETE' });
+      adminFlash(`Usuário ${user.email} excluído.`);
+    }
+    await refreshAdmin();
+  } catch (err) {
+    adminFlash(err.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+els.diffClose?.addEventListener('click', () => els.diffDialog.close());
+els.diffDialog?.addEventListener('click', (e) => {
   if (e.target === els.diffDialog) els.diffDialog.close();
 });
 
-els.btnNotify.addEventListener('click', () => enableBrowserNotifications());
+els.btnNotify?.addEventListener('click', () => enableBrowserNotifications());
 
-els.browserNotifications.addEventListener('change', async () => {
+els.browserNotifications?.addEventListener('change', async () => {
   browserNotifyEnabled = els.browserNotifications.checked;
   await api('/settings', {
     method: 'PATCH',
@@ -403,7 +637,7 @@ els.browserNotifications.addEventListener('change', async () => {
   if (browserNotifyEnabled) await enableBrowserNotifications();
 });
 
-els.desktopNotifications.addEventListener('change', async () => {
+els.desktopNotifications?.addEventListener('change', async () => {
   await api('/settings', {
     method: 'PATCH',
     body: JSON.stringify({ desktopNotifications: els.desktopNotifications.checked }),
@@ -413,10 +647,10 @@ els.desktopNotifications.addEventListener('change', async () => {
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredInstall = e;
-  els.btnInstall.classList.remove('hidden');
+  els.btnInstall?.classList.remove('hidden');
 });
 
-els.btnInstall.addEventListener('click', async () => {
+els.btnInstall?.addEventListener('click', async () => {
   if (!deferredInstall) return;
   deferredInstall.prompt();
   await deferredInstall.userChoice;
@@ -442,12 +676,13 @@ updateNotifyUi();
 (async () => {
   try {
     const me = await api('/auth/me');
+    currentUser = me.user;
     if (els.userEmail && me.user?.email) {
       els.userEmail.textContent = me.user.email;
       els.userEmail.hidden = false;
     }
-    if (els.btnAdmin && me.user?.role === 'admin') {
-      els.btnAdmin.classList.remove('hidden');
+    if (els.navAdmin && me.user?.role === 'admin') {
+      els.navAdmin.classList.remove('hidden');
     }
     if (els.quotaHint && me.quota) {
       els.quotaHint.hidden = false;
@@ -455,8 +690,10 @@ updateNotifyUi();
     }
     connectSse();
     await refresh();
+    const initial = location.hash.replace('#', '') || 'dashboard';
+    setView(initial);
   } catch (err) {
-    if (!String(err.message).includes('Não autenticado')) {
+    if (!String(err.message).includes('Não autenticado') && els.monitors) {
       els.monitors.innerHTML = `<p class="empty">Falha ao carregar: ${escapeHtml(err.message)}</p>`;
     }
   }

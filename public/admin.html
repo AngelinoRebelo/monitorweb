@@ -2,46 +2,13 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0f2f24" />
+    <meta http-equiv="refresh" content="0;url=/#admin" />
     <title>Admin · MonitorWeb</title>
-    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Fraunces:opsz,wght@9..144,560;9..144,700&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="/styles.css" />
+    <script>
+      location.replace('/#admin');
+    </script>
   </head>
   <body>
-    <div class="bg" aria-hidden="true"></div>
-    <header class="top">
-      <div class="brand">
-        <span class="mark" aria-hidden="true"></span>
-        <div>
-          <p class="brand-name">MonitorWeb</p>
-          <p class="brand-sub">painel do administrador</p>
-        </div>
-      </div>
-      <div class="top-actions">
-        <a class="btn ghost" href="/">Voltar ao painel</a>
-        <button type="button" id="btn-logout" class="btn ghost">Sair</button>
-      </div>
-    </header>
-
-    <main class="admin-layout">
-      <section class="panel">
-        <h1>Contas de usuário</h1>
-        <p class="lead">
-          Ative/desative contas, defina o limite de sites, redefina senhas e atenda pedidos de
-          recuperação.
-        </p>
-        <p id="mail-status" class="hint"></p>
-        <p id="admin-flash" class="hint" hidden></p>
-        <div id="users-list" class="users-list"></div>
-      </section>
-    </main>
-    <script src="/admin.js" type="module"></script>
+    <p><a href="/#admin">Abrir painel Admin</a></p>
   </body>
 </html>

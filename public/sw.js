@@ -1,4 +1,4 @@
-const CACHE = 'monitorweb-v6-admin';
+const CACHE = 'monitorweb-v7-shell';
 const ASSETS = ['/login.html', '/styles.css', '/login.js', '/reset.html', '/reset.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', (event) => {

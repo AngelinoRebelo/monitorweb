@@ -95,7 +95,15 @@ export function updateSettings(userId, patch) {
 export function listMonitors({ userId } = {}) {
   let monitors = read().monitors;
   if (userId) monitors = monitors.filter((m) => m.userId === userId);
-  return monitors.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return monitors.sort((a, b) => {
+    const tb = Date.parse(b.lastChangedAt || '') || 0;
+    const ta = Date.parse(a.lastChangedAt || '') || 0;
+    if (tb !== ta) return tb - ta;
+    const cb = Date.parse(b.lastCheckedAt || '') || 0;
+    const ca = Date.parse(a.lastCheckedAt || '') || 0;
+    if (cb !== ca) return cb - ca;
+    return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+  });
 }
 
 export function countMonitorsByUser(userId) {

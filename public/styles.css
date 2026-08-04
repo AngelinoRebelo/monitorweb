@@ -63,6 +63,149 @@ body {
   backdrop-filter: blur(10px);
 }
 
+.app-shell {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  padding: 1.1rem 0.9rem;
+  border-right: 1px solid var(--line);
+  background: rgba(8, 22, 17, 0.72);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.25rem 0.35rem;
+}
+
+.side-nav {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.side-link {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.7rem 0.85rem;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.side-link:hover {
+  color: var(--ink);
+  background: rgba(232, 243, 236, 0.05);
+}
+
+.side-link.is-active {
+  color: var(--accent-ink);
+  background: linear-gradient(135deg, #d4a24c, #b8863a);
+}
+
+.sidebar-foot {
+  margin-top: auto;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.side-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.app-main {
+  min-width: 0;
+}
+
+.top-compact {
+  padding: 1rem 1.25rem;
+}
+
+.view-title {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.55rem;
+}
+
+.view {
+  display: none;
+  padding: 0 1.25rem 2rem;
+}
+
+.view.is-active {
+  display: block;
+}
+
+.dash-panel {
+  max-width: 980px;
+}
+
+.dash-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0 1.4rem;
+}
+
+.stat-card {
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.stat-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.stat-value {
+  margin: 0.25rem 0 0;
+  font-family: var(--display);
+  font-size: 1.7rem;
+}
+
+.dash-heading {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.dash-feed {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.dash-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.dash-item-main {
+  min-width: 0;
+}
+
+.admin-embed {
+  max-width: 960px;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -742,6 +885,29 @@ dialog::backdrop {
 }
 
 @media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: relative;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .side-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dash-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dash-item {
+    flex-direction: column;
+  }
+
   .layout {
     grid-template-columns: 1fr;
     grid-template-areas: "form" "list";
