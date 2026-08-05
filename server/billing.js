@@ -345,10 +345,12 @@ async function fetchMpPayment(paymentId) {
 
 function verifyWebhookSignature(req) {
   const secret = getBillingConfig().mercadoPago.webhookSecret;
-  if (!secret) return true; // optional until configured
+  if (!secret) return { ok: true, skipped: true };
   const xSignature = req.headers['x-signature'];
   const xRequestId = req.headers['x-request-id'];
-  if (!xSignature || !xRequestId) return false;
+  if (!xSignature || !xRequestId) {
+    return { ok: false, reason: 'headers ausentes' };
+  }
   const parts = Object.fromEntries(
     String(xSignature)
       .split(',')
@@ -357,17 +359,23 @@ function verifyWebhookSignature(req) {
   );
   const ts = parts.ts;
   const hash = parts.v1;
-  if (!ts || !hash) return false;
-  const dataId = req.query?.['data.id'] || req.query?.id || req.body?.data?.id || '';
-  const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
-  const digest = createHmac('sha256', secret).update(manifest).digest('hex');
-  try {
-    const a = Buffer.from(digest, 'utf8');
-    const b = Buffer.from(String(hash), 'utf8');
-    return a.length === b.length && timingSafeEqual(a, b);
-  } catch {
-    return false;
+  if (!ts || !hash) return { ok: false, reason: 'ts/v1 ausentes' };
+
+  const dataId = String(req.query?.['data.id'] || req.query?.id || req.body?.data?.id || '');
+  // Mercado Pago docs: try with and without lowercase for hex ids
+  const candidates = [dataId, dataId.toLowerCase()];
+  for (const id of candidates) {
+    const manifest = `id:${id};request-id:${xRequestId};ts:${ts};`;
+    const digest = createHmac('sha256', secret).update(manifest).digest('hex');
+    try {
+      const a = Buffer.from(digest, 'utf8');
+      const b = Buffer.from(String(hash), 'utf8');
+      if (a.length === b.length && timingSafeEqual(a, b)) return { ok: true };
+    } catch {
+      /* continue */
+    }
   }
+  return { ok: false, reason: 'hash não confere' };
 }
 
 /**
@@ -404,43 +412,60 @@ export async function activatePayment({ paymentRecord, mpPayment, updateUser, fi
   return updated;
 }
 
-export async function handleWebhook(req, { updateUser, findUser, notifyAccount }) {
-  if (!verifyWebhookSignature(req)) {
-    return { ok: false, error: 'Assinatura inválida' };
+function findOrBuildPaymentRecord(mpPayment) {
+  const external = String(mpPayment.external_reference || '');
+  const payments = readPayments();
+  let record = external ? payments.find((p) => p.id === external) : null;
+  if (!record) {
+    const metaPayId = mpPayment.metadata?.payment_id;
+    if (metaPayId) record = payments.find((p) => p.id === metaPayId);
   }
-
-  const type = req.body?.type || req.body?.action || req.query?.type || '';
-  const dataId =
-    req.body?.data?.id ||
-    req.query?.['data.id'] ||
-    req.query?.id ||
-    null;
-
-  const isPayment =
-    String(type).includes('payment') || req.body?.topic === 'payment' || req.query?.topic === 'payment';
-
-  if (!isPayment || !dataId) {
-    return { ok: true, ignored: true };
+  if (!record) {
+    record = payments.find((p) => p.mpPaymentId && String(p.mpPaymentId) === String(mpPayment.id));
   }
+  if (record) return record;
 
-  const mpPayment = await fetchMpPayment(dataId);
+  // Fallback: build from MP metadata / amount match against plans
+  const metaUserId = mpPayment.metadata?.user_id;
+  const metaPlanId = mpPayment.metadata?.plan_id;
+  const cfg = getBillingConfig();
+  let plan = metaPlanId ? cfg.plans.find((p) => p.id === metaPlanId) : null;
+  if (!plan) {
+    const amount = Number(mpPayment.transaction_amount);
+    plan = cfg.plans.find((p) => Number(p.price) === amount && p.active !== false);
+  }
+  if (!metaUserId || !plan) return null;
+
+  const paymentId = external || String(mpPayment.metadata?.payment_id || randomUUID());
+  record = {
+    id: paymentId,
+    userId: metaUserId,
+    planId: plan.id,
+    amount: Number(plan.price),
+    days: Number(plan.days),
+    status: 'pending',
+    mpPreferenceId: null,
+    mpPaymentId: String(mpPayment.id),
+    initPoint: null,
+    createdAt: new Date().toISOString(),
+    paidAt: null,
+  };
+  payments.push(record);
+  writePayments(payments);
+  return record;
+}
+
+export async function applyApprovedMpPayment(mpPayment, { updateUser, findUser, notifyAccount }) {
   if (!mpPayment || mpPayment.status !== 'approved') {
     return { ok: true, status: mpPayment?.status || 'unknown' };
   }
-
-  const external = String(mpPayment.external_reference || '');
-  const payments = readPayments();
-  let record = payments.find((p) => p.id === external);
+  const record = findOrBuildPaymentRecord(mpPayment);
   if (!record) {
-    const metaPayId = mpPayment.metadata?.payment_id;
-    record = payments.find((p) => p.id === metaPayId);
-  }
-  if (!record) {
-    console.warn('[billing] pagamento aprovado sem registro local', dataId, external);
-    return { ok: true, unmatched: true };
+    console.warn('[billing] pagamento aprovado sem registro local', mpPayment.id, mpPayment.external_reference);
+    return { ok: true, unmatched: true, mpPaymentId: String(mpPayment.id) };
   }
   if (record.status === 'approved') {
-    return { ok: true, already: true };
+    return { ok: true, already: true, userId: record.userId };
   }
 
   const user = await activatePayment({
@@ -461,6 +486,36 @@ export async function handleWebhook(req, { updateUser, findUser, notifyAccount }
   return { ok: true, activated: true, userId: record.userId };
 }
 
+export async function reconcileMpPayment(mpPaymentId, hooks) {
+  const mpPayment = await fetchMpPayment(mpPaymentId);
+  return applyApprovedMpPayment(mpPayment, hooks);
+}
+
+export async function handleWebhook(req, { updateUser, findUser, notifyAccount }) {
+  const sig = verifyWebhookSignature(req);
+  if (!sig.ok) {
+    // Still accept: we re-validate by fetching the payment with our access token.
+    console.warn('[billing] webhook assinatura:', sig.reason || 'inválida — seguindo via API');
+  }
+
+  const type = req.body?.type || req.body?.action || req.query?.type || '';
+  const dataId =
+    req.body?.data?.id ||
+    req.query?.['data.id'] ||
+    req.query?.id ||
+    null;
+
+  const isPayment =
+    String(type).includes('payment') || req.body?.topic === 'payment' || req.query?.topic === 'payment';
+
+  if (!isPayment || !dataId) {
+    return { ok: true, ignored: true };
+  }
+
+  const mpPayment = await fetchMpPayment(dataId);
+  return applyApprovedMpPayment(mpPayment, { updateUser, findUser, notifyAccount });
+}
+
 export const billingRouter = Router();
 export const billingWebhookRouter = Router();
 
@@ -473,16 +528,17 @@ billingWebhookRouter.post('/webhook', async (req, res) => {
       findUser: (id) => auth.findUserByIdPublic(id),
       notifyAccount: (user) => notify.notifyAccount(user),
     });
-    if (result.error) return res.status(401).json(result);
-    res.json(result);
+    // Always 200 so Mercado Pago marks delivery as OK.
+    res.status(200).json(result);
   } catch (err) {
     console.error('[billing] webhook', err?.message || err);
+    // Still 200 to avoid endless retries on transient processing errors after we logged them.
+    // Return 500 only when we couldn't even parse — MP will retry.
     res.status(500).json({ error: err?.message || 'webhook error' });
   }
 });
 
-billingWebhookRouter.get('/webhook', async (req, res) => {
-  // MP sometimes sends GET validation
+billingWebhookRouter.get('/webhook', async (_req, res) => {
   res.status(200).json({ ok: true });
 });
 

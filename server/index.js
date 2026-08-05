@@ -41,6 +41,8 @@ app.use(attachUser);
 
 // Mercado Pago webhooks must be public (no session)
 app.use('/api/billing', billingWebhookRouter);
+// Alias for common typo configured in Mercado Pago panel (billlng)
+app.use('/api/billlng', billingWebhookRouter);
 
 app.use('/api/auth', authRouter);
 app.use('/api/admin', requireAuth, adminRouter);

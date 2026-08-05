@@ -28,6 +28,8 @@ const els = {
   mpEnabled: $('#mp-enabled'),
   billingTrialDays: $('#billing-trial-days'),
   mpWebhookUrl: $('#mp-webhook-url'),
+  reconcileForm: $('#reconcile-form'),
+  mpReconcileId: $('#mp-reconcile-id'),
   plansAdminForm: $('#plans-admin-form'),
   plansAdminList: $('#plans-admin-list'),
   billingUsersList: $('#billing-users-list'),
@@ -1230,6 +1232,31 @@ els.mpConfigForm?.addEventListener('submit', async (e) => {
     });
     billingAdminFlash('Configuração Mercado Pago salva.');
     await refreshBillingAdmin();
+  } catch (err) {
+    billingAdminFlash(err.message, true);
+  }
+});
+
+els.reconcileForm?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const mpPaymentId = String(els.mpReconcileId?.value || '').trim();
+  if (!mpPaymentId) {
+    billingAdminFlash('Informe o ID do pagamento.', true);
+    return;
+  }
+  try {
+    const result = await api('/admin/billing/reconcile', {
+      method: 'POST',
+      body: JSON.stringify({ mpPaymentId }),
+    });
+    if (result.activated) billingAdminFlash(`Pagamento ${mpPaymentId} liberado.`);
+    else if (result.already) billingAdminFlash(`Pagamento ${mpPaymentId} já estava liberado.`);
+    else if (result.unmatched) {
+      billingAdminFlash('Pagamento aprovado no MP, mas sem vínculo de usuário/plano.', true);
+    } else billingAdminFlash(`Status MP: ${result.status || 'ok'}`);
+    if (els.mpReconcileId) els.mpReconcileId.value = '';
+    await refreshBillingAdmin();
+    await refreshSessionUi();
   } catch (err) {
     billingAdminFlash(err.message, true);
   }

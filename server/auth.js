@@ -853,3 +853,20 @@ adminRouter.put('/billing', async (req, res) => {
   const config = saveBillingConfig(patch);
   res.json({ ok: true, config });
 });
+
+adminRouter.post('/billing/reconcile', async (req, res) => {
+  const mpPaymentId = String(req.body?.mpPaymentId || req.body?.id || '').trim();
+  if (!mpPaymentId) return res.status(400).json({ error: 'Informe mpPaymentId' });
+  try {
+    const billing = await import('./billing.js');
+    const notify = await import('./notify.js');
+    const result = await billing.reconcileMpPayment(mpPaymentId, {
+      updateUser: (id, patch) => updateUserRecordPublic(id, patch),
+      findUser: (id) => findUserByIdPublic(id),
+      notifyAccount: (user) => notify.notifyAccount(user),
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err?.message || 'Falha ao reconciliar pagamento' });
+  }
+});

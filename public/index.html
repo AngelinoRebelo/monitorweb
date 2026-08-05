@@ -184,6 +184,18 @@
                 <button type="submit" class="btn primary">Salvar Mercado Pago</button>
               </form>
 
+              <form id="reconcile-form" class="card billing-card">
+                <h2>Liberar pagamento manual</h2>
+                <p class="hint">
+                  Se o Pix já foi pago mas o plano não liberou, cole o ID do pagamento do Mercado Pago.
+                </p>
+                <label>
+                  ID do pagamento (MP)
+                  <input id="mp-reconcile-id" type="text" placeholder="ex.: 171262618363" />
+                </label>
+                <button type="submit" class="btn primary">Confirmar e liberar</button>
+              </form>
+
               <form id="plans-admin-form" class="card billing-card">
                 <h2>Planos e valores</h2>
                 <div id="plans-admin-list" class="plans-admin-list"></div>
