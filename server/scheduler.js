@@ -150,6 +150,19 @@ export function startScheduler() {
       }, index * 1500);
     }
   }, 2500);
+
+  // Expiry warnings + post-paid grace trial (hourly).
+  cron.schedule('20 * * * *', () => {
+    import('./billing-lifecycle.js')
+      .then((m) => m.runBillingLifecycle())
+      .catch((err) => console.error('[billing-lifecycle]', err?.message || err));
+  });
+  // Run once shortly after boot.
+  setTimeout(() => {
+    import('./billing-lifecycle.js')
+      .then((m) => m.runBillingLifecycle())
+      .catch((err) => console.error('[billing-lifecycle]', err?.message || err));
+  }, 12000);
 }
 
 export { runCheck };

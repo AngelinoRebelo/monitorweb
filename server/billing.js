@@ -41,6 +41,8 @@ const DEFAULT_PLANS = [
 export const TRIAL_MAX_MONITORS = 5;
 export const PAID_DEFAULT_MAX_MONITORS = 100;
 export const TRIAL_EMAIL_DAILY_LIMIT = 10;
+/** After a paid plan expires, user gets this many days of trial grace. */
+export const PAID_GRACE_TRIAL_DAYS = 3;
 
 function normalizePlan(p = {}) {
   const maxMonitors = Math.max(
@@ -627,6 +629,11 @@ export async function activatePayment({ paymentRecord, mpPayment, updateUser, fi
     billingExpiresAt: expiresAt,
     emailNotifyAllowed: true,
     maxMonitors: nextMax,
+    billingGraceFromPaidAt: null,
+    billingGraceForExpiresAt: null,
+    billingExpiryWarn5dFor: null,
+    billingExpiryWarn3dFor: null,
+    billingExpiryWarn1dFor: null,
   });
 
   const list = readPayments();

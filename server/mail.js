@@ -247,3 +247,184 @@ export async function sendPaymentReceiptEmail({
 
   return sendMail({ to, subject, html, text });
 }
+
+function fmtBr(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('pt-BR');
+  } catch {
+    return String(iso);
+  }
+}
+
+export async function sendWelcomeEmail({ to, trialDays, trialSites, trialEndsAt, appUrl }) {
+  const subject = 'Bem-vindo ao MonitorWeb';
+  const exp = fmtBr(trialEndsAt);
+  const text = [
+    'Bem-vindo ao MonitorWeb!',
+    '',
+    'Sua conta foi criada com sucesso.',
+    `Você tem ${trialDays || 0} dia(s) de trial com até ${trialSites || 0} site(s).`,
+    trialEndsAt ? `O trial vai até ${exp}.` : '',
+    '',
+    'No trial você pode monitorar sites com alertas no navegador. Alertas por e-mail ficam nos planos pagos.',
+    '',
+    appUrl ? `Acesse o painel: ${appUrl}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const html = `
+  <div style="font-family:Arial,sans-serif;line-height:1.5;color:#123126;max-width:560px">
+    <h2 style="margin:0 0 12px">Bem-vindo ao MonitorWeb</h2>
+    <p>Sua conta foi criada com sucesso.</p>
+    <p style="background:#f7faf8;padding:12px 14px;border-radius:10px;border:1px solid #d7e0db">
+      Trial de <strong>${trialDays || 0} dia(s)</strong> com até <strong>${trialSites || 0} site(s)</strong>.<br/>
+      ${trialEndsAt ? `Válido até <strong>${exp}</strong>.` : ''}
+    </p>
+    <p>No trial você monitora sites com alertas no navegador. Para receber alertas por e-mail e ampliar o limite, escolha um plano.</p>
+    ${
+      appUrl
+        ? `<p style="margin:24px 0"><a href="${appUrl}" style="background:#d4a24c;color:#1a1408;padding:12px 18px;border-radius:999px;text-decoration:none;font-weight:700;display:inline-block">Abrir painel</a></p>`
+        : ''
+    }
+  </div>`;
+
+  return sendMail({ to, subject, html, text });
+}
+
+export async function sendAdminNewUserEmail({
+  to,
+  userEmail,
+  userId,
+  createdAt,
+  trialEndsAt,
+  maxMonitors,
+  emailDailyLimit,
+  role,
+  appUrl,
+}) {
+  const subject = `MonitorWeb — nova conta: ${userEmail}`;
+  const text = [
+    'Nova conta criada no MonitorWeb',
+    '',
+    `E-mail: ${userEmail}`,
+    `ID: ${userId}`,
+    `Perfil: ${role || 'user'}`,
+    `Criada em: ${fmtBr(createdAt)}`,
+    `Trial até: ${fmtBr(trialEndsAt)}`,
+    `Sites iniciais: ${maxMonitors}`,
+    `Limite e-mail/dia: ${emailDailyLimit}`,
+    appUrl ? `Painel: ${appUrl}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const rows = [
+    ['E-mail', userEmail || '—'],
+    ['ID', userId || '—'],
+    ['Perfil', role || 'user'],
+    ['Criada em', fmtBr(createdAt)],
+    ['Trial até', fmtBr(trialEndsAt)],
+    ['Sites iniciais', String(maxMonitors ?? '—')],
+    ['Limite e-mail/dia', String(emailDailyLimit ?? '—')],
+  ];
+
+  const html = `
+  <div style="font-family:Arial,sans-serif;line-height:1.5;color:#123126;max-width:560px">
+    <h2 style="margin:0 0 8px">Nova conta criada</h2>
+    <p style="margin:0 0 16px;color:#4a5c54">Aviso automático para o administrador</p>
+    <table style="width:100%;border-collapse:collapse;margin:0 0 16px">
+      ${rows
+        .map(
+          ([k, v]) => `
+        <tr>
+          <td style="padding:8px 10px;border:1px solid #d7e0db;background:#f7faf8;width:38%"><strong>${k}</strong></td>
+          <td style="padding:8px 10px;border:1px solid #d7e0db">${v}</td>
+        </tr>`
+        )
+        .join('')}
+    </table>
+    ${appUrl ? `<p><a href="${appUrl}/#admin">Abrir Admin</a></p>` : ''}
+  </div>`;
+
+  return sendMail({ to, subject, html, text });
+}
+
+export async function sendPlanExpiryWarningEmail({
+  to,
+  daysLeft,
+  planKind,
+  expiresAt,
+  graceDays,
+  appUrl,
+}) {
+  const kindLabel = planKind === 'paid' ? 'plano pago' : 'período trial';
+  const subject = `MonitorWeb — seu ${kindLabel} expira em ${daysLeft} dia(s)`;
+  const exp = fmtBr(expiresAt);
+  const graceNote =
+    planKind === 'paid' && graceDays > 0
+      ? `Após o vencimento você entra automaticamente em modo trial por ${graceDays} dia(s), com o limite de sites do trial. Renove antes para manter o plano pago sem interrupção.`
+      : 'Renove ou escolha um plano para continuar com mais sites e alertas por e-mail.';
+
+  const text = [
+    `Atenção: seu ${kindLabel} no MonitorWeb expira em ${daysLeft} dia(s).`,
+    '',
+    `Data de vencimento: ${exp}`,
+    '',
+    graceNote,
+    '',
+    appUrl ? `Escolher plano: ${appUrl}/#billing` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const html = `
+  <div style="font-family:Arial,sans-serif;line-height:1.5;color:#123126;max-width:560px">
+    <h2 style="margin:0 0 12px">Aviso de vencimento</h2>
+    <p>Seu <strong>${kindLabel}</strong> expira em <strong>${daysLeft} dia(s)</strong>.</p>
+    <p style="background:#fff6e8;padding:12px 14px;border-radius:10px;border:1px solid #ecd7a8">
+      Vencimento: <strong>${exp}</strong>
+    </p>
+    <p>${graceNote}</p>
+    ${
+      appUrl
+        ? `<p style="margin:24px 0"><a href="${appUrl}/#billing" style="background:#d4a24c;color:#1a1408;padding:12px 18px;border-radius:999px;text-decoration:none;font-weight:700;display:inline-block">Ver planos</a></p>`
+        : ''
+    }
+  </div>`;
+
+  return sendMail({ to, subject, html, text });
+}
+
+export async function sendPostPaidGraceEmail({ to, graceDays, graceEndsAt, appUrl }) {
+  const subject = 'MonitorWeb — plano pago encerrado; trial de cortesia iniciado';
+  const exp = fmtBr(graceEndsAt);
+  const text = [
+    'Seu plano pago no MonitorWeb encerrou.',
+    '',
+    `Você entrou em modo trial por ${graceDays} dia(s), válido até ${exp}.`,
+    'Nesse período vale o limite de sites do trial. Alertas por e-mail ficam nos planos pagos.',
+    '',
+    appUrl ? `Renovar: ${appUrl}/#billing` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const html = `
+  <div style="font-family:Arial,sans-serif;line-height:1.5;color:#123126;max-width:560px">
+    <h2 style="margin:0 0 12px">Plano pago encerrado</h2>
+    <p>Você entrou em <strong>modo trial por ${graceDays} dia(s)</strong>.</p>
+    <p style="background:#f7faf8;padding:12px 14px;border-radius:10px;border:1px solid #d7e0db">
+      Trial de cortesia até <strong>${exp}</strong>.
+    </p>
+    <p>Nesse período vale o limite de sites do trial. Para voltar ao plano pago e aos alertas por e-mail, escolha um plano.</p>
+    ${
+      appUrl
+        ? `<p style="margin:24px 0"><a href="${appUrl}/#billing" style="background:#d4a24c;color:#1a1408;padding:12px 18px;border-radius:999px;text-decoration:none;font-weight:700;display:inline-block">Ver planos</a></p>`
+        : ''
+    }
+  </div>`;
+
+  return sendMail({ to, subject, html, text });
+}

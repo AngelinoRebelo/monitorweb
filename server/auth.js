@@ -16,13 +16,15 @@ import {
   isMailConfigured,
   mailProvider,
   sendPasswordResetEmail,
+  sendWelcomeEmail,
+  sendAdminNewUserEmail,
 } from './mail.js';
 import {
-  canUseEmailAlerts,
   getBillingState,
   getEffectiveEmailDailyLimit,
   getEffectiveMonitorLimit,
   getTrialDefaults,
+  canUseEmailAlerts,
   TRIAL_MAX_MONITORS,
 } from './billing.js';
 
@@ -178,6 +180,12 @@ function normalizeUser(user, { isFirst = false } = {}) {
     billingExpiresAt: user.billingExpiresAt || null,
     billingTrialEndsAt,
     billingPermanent: user.billingPermanent === true,
+    billingExpiryWarn5dFor: user.billingExpiryWarn5dFor || null,
+    billingExpiryWarn3dFor: user.billingExpiryWarn3dFor || null,
+    billingExpiryWarn1dFor: user.billingExpiryWarn1dFor || null,
+    billingGraceFromPaidAt: user.billingGraceFromPaidAt || null,
+    billingGraceForExpiresAt: user.billingGraceForExpiresAt || null,
+    welcomeEmailSentAt: user.welcomeEmailSentAt || null,
     resetTokenHash: user.resetTokenHash || null,
     resetExpires: user.resetExpires || null,
     resetRequestedAt: user.resetRequestedAt || null,
@@ -329,6 +337,18 @@ export function updateUserRecordPublic(id, patch) {
 
 export function findUserByIdPublic(id) {
   return findUserById(id);
+}
+
+/** Raw normalized users for lifecycle jobs (expiry warnings / grace). */
+export function findAllUsersForLifecycle() {
+  return readUsers();
+}
+
+/** Active admin e-mails (site owners) for operational alerts. */
+export function getAdminNotifyEmails() {
+  return readUsers()
+    .filter((u) => u.role === 'admin' && u.active !== false && u.email)
+    .map((u) => u.email);
 }
 
 function createResetTokenForUser(userId) {
@@ -515,7 +535,42 @@ authRouter.post('/register', (req, res) => {
   users.push(user);
   writeUsers(users.map((u, i) => normalizeUser(u, { isFirst: i === 0 && users.length === 1 })));
   setSessionCookie(res, user.id);
-  res.status(201).json({ user: publicUser(findUserById(user.id)) });
+
+  const saved = findUserById(user.id);
+  const pub = publicUser(saved);
+  res.status(201).json({ user: pub });
+
+  // Welcome + admin alert (async; do not block registration response).
+  if (isMailConfigured() && saved) {
+    const base = appBaseUrl(req);
+    const trialInfo = getTrialDefaults();
+    void sendWelcomeEmail({
+      to: saved.email,
+      trialDays: trialInfo.days,
+      trialSites: saved.maxMonitors,
+      trialEndsAt: saved.billingTrialEndsAt,
+      appUrl: base,
+    })
+      .then(() => updateUserRecord(saved.id, { welcomeEmailSentAt: new Date().toISOString() }))
+      .catch((err) => console.error('[auth] welcome email', err?.message || err));
+
+    if (!isFirst) {
+      for (const adminEmail of getAdminNotifyEmails()) {
+        if (adminEmail === saved.email) continue;
+        void sendAdminNewUserEmail({
+          to: adminEmail,
+          userEmail: saved.email,
+          userId: saved.id,
+          createdAt: saved.createdAt,
+          trialEndsAt: saved.billingTrialEndsAt,
+          maxMonitors: saved.maxMonitors,
+          emailDailyLimit: saved.emailNotifyDailyLimit,
+          role: saved.role,
+          appUrl: base,
+        }).catch((err) => console.error('[auth] admin new-user email', err?.message || err));
+      }
+    }
+  }
 });
 
 authRouter.post('/login', (req, res) => {
