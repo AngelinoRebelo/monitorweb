@@ -262,6 +262,10 @@ export function getEffectiveEmailDailyLimit(user) {
     return stored ?? TRIAL_EMAIL_DAILY_LIMIT;
   }
   const state = getBillingState(user);
+  // Admin-liberated accounts keep the limit set on the user (not trial cap).
+  if (user.emailNotifyAllowed === true && !hasPaidEmailPlan(user) && stored != null) {
+    return stored;
+  }
   if (state.status === 'trial' || state.source === 'trial') {
     const trialLimit = getBillingConfig().trialEmailDailyLimit ?? TRIAL_EMAIL_DAILY_LIMIT;
     return stored == null ? trialLimit : Math.min(stored, trialLimit);
@@ -279,8 +283,8 @@ export function getTrialDefaults() {
   };
 }
 
-/** E-mail change alerts require a paid/permanent plan (not trial). */
-export function canUseEmailAlerts(user) {
+/** Paid/permanent/admin plan unlocks e-mail (without admin override). */
+export function hasPaidEmailPlan(user) {
   if (!user) return false;
   if (user.role === 'admin') return true;
   const state = getBillingState(user);
@@ -288,6 +292,13 @@ export function canUseEmailAlerts(user) {
     state.entitled === true &&
     (state.source === 'paid' || state.source === 'permanent' || state.source === 'admin')
   );
+}
+
+/** E-mail alerts: paid plan, or admin explicitly liberated the option. */
+export function canUseEmailAlerts(user) {
+  if (!user) return false;
+  if (hasPaidEmailPlan(user)) return true;
+  return user.emailNotifyAllowed === true;
 }
 
 export function getBillingState(user) {
@@ -393,10 +404,14 @@ export function applyBillingFields(user) {
 
 /** Unlock e-mail option only for paid/permanent plans (not trial). */
 export function syncEmailAccessFromBilling(user) {
-  if (canUseEmailAlerts(user)) {
+  if (hasPaidEmailPlan(user)) {
     return {
       emailNotifyAllowed: true,
     };
+  }
+  // Keep an explicit admin grant; otherwise lock.
+  if (user?.emailNotifyAllowed === true) {
+    return { emailNotifyAllowed: true };
   }
   return {
     emailNotifyAllowed: false,

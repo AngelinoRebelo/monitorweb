@@ -229,6 +229,7 @@ function publicUser(user) {
     maxMonitors: user.maxMonitors ?? DEFAULT_MAX_MONITORS,
     createdAt: user.createdAt,
     monitorCount: countMonitorsByUser(user.id),
+    // Persist admin "liberar e-mail" flag for trial users (not only paid plans).
     emailNotifyAllowed: emailOk,
     emailNotifyStatus: emailOk ? user.emailNotifyStatus || 'off' : 'off',
     emailNotifyDailyLimit: getEffectiveEmailDailyLimit(user),
@@ -506,7 +507,7 @@ authRouter.post('/register', (req, res) => {
       createdAt,
       billingActive: true,
       billingTrialEndsAt: trialEndsAt,
-      emailNotifyAllowed: true,
+      emailNotifyAllowed: isFirst ? true : false,
       emailNotifyDailyLimit: isFirst ? DEFAULT_EMAIL_DAILY_LIMIT : trial.emailDailyLimit,
     },
     { isFirst }

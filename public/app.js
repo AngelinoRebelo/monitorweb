@@ -198,6 +198,7 @@ function emailNotifyLabel(status) {
 function hasPaidEmailAccess(user = currentUser) {
   if (!user) return false;
   if (user.role === 'admin') return true;
+  if (user.emailNotifyAllowed === true) return true;
   const billing = user.billing || {};
   return (
     billing.entitled === true &&
@@ -962,12 +963,16 @@ els.usersList?.addEventListener('click', async (e) => {
     return;
   }
 
-  const allowBox = e.target.closest('.email-allowed');
+  const allowBox =
+    e.target.closest('.email-allowed') ||
+    e.target.closest('label.check')?.querySelector('.email-allowed');
   if (allowBox) {
+    e.stopPropagation();
     const card = allowBox.closest('.user-card');
     const id = card?.dataset.id;
     if (!id) return;
     const user = cachedUsers.find((u) => u.id === id);
+    // Prefer the checkbox's current value after the native toggle.
     const next = allowBox.checked;
     try {
       const data = await api(`/admin/users/${id}`, {
@@ -977,13 +982,22 @@ els.usersList?.addEventListener('click', async (e) => {
           ...(next ? {} : { emailNotifyStatus: 'off' }),
         }),
       });
-      if (data.user) applyAccountUser(data.user);
+      if (data.user) {
+        applyAccountUser(data.user);
+        const idx = cachedUsers.findIndex((u) => u.id === id);
+        if (idx >= 0) cachedUsers[idx] = { ...cachedUsers[idx], ...data.user };
+      }
       adminFlash(
         next
-          ? `Opção de e-mail liberada para ${user.email}. Peça ao usuário para marcar a caixa em Monitores.`
-          : `Opção de e-mail bloqueada para ${user.email}.`
+          ? `Opção de e-mail liberada para ${user?.email || 'usuário'}. Peça ao usuário para marcar a caixa em Monitores.`
+          : `Opção de e-mail bloqueada para ${user?.email || 'usuário'}.`
       );
-      await refreshAdmin();
+      // Keep card open and avoid full remount flicker when possible.
+      if (expandedAdminUserIds.has(id) && data.user) {
+        renderUsers(cachedUsers);
+      } else {
+        await refreshAdmin();
+      }
       await refreshSessionUi();
     } catch (err) {
       allowBox.checked = !next;
