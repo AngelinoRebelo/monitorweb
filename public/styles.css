@@ -1134,8 +1134,9 @@ dialog::backdrop {
 
 .users-list {
   display: grid;
-  gap: 1rem;
+  gap: 0.65rem;
   margin-top: 1rem;
+  max-width: 720px;
 }
 
 .user-card .user-head {
@@ -1152,6 +1153,105 @@ dialog::backdrop {
   gap: 0.75rem;
   align-items: end;
   margin-bottom: 0.85rem;
+}
+
+.user-card-compact {
+  padding: 0;
+  overflow: hidden;
+}
+
+.user-card-toggle {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.75rem 0.9rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.user-card-toggle:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.user-card-main {
+  min-width: 0;
+}
+
+.user-card-main strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-usage-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+  justify-content: flex-end;
+  align-items: center;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.user-usage-summary strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.user-card-compact .chevron {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.2s ease;
+  justify-self: end;
+}
+
+.user-card-compact.is-open .chevron {
+  transform: rotate(45deg);
+}
+
+.user-card-body {
+  padding: 0 0.9rem 0.85rem;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0.65rem;
+}
+
+.user-card-body[hidden] {
+  display: none;
+}
+
+.billing-user-grid {
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+}
+
+.permanent-check {
+  margin: 0.15rem 0;
+}
+
+@media (max-width: 700px) {
+  .user-card-toggle {
+    grid-template-columns: 1fr auto;
+  }
+
+  .user-usage-summary {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .billing-user-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .actions.wrap {

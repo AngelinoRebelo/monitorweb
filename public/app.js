@@ -65,8 +65,11 @@ let currentUser = null;
 let currentView = 'dashboard';
 let cachedUsers = [];
 let cachedPlans = [];
+let cachedBillingUsers = [];
 const expandedIds = new Set();
 const expandedDashIds = new Set();
+const expandedAdminUserIds = new Set();
+const expandedBillingUserIds = new Set();
 
 const VIEW_TITLES = {
   dashboard: 'Dashboard',
@@ -569,62 +572,76 @@ function renderUsers(users) {
         ? `<p class="meta warn-text">Recuperação pendente desde ${formatDate(u.resetRequestedAt)}</p>`
         : '';
       const emailStatus = u.emailNotifyStatus || 'off';
+      const open = expandedAdminUserIds.has(u.id);
+      const sitesUsed = Number(u.monitorCount) || 0;
+      const sitesMax = Number(u.maxMonitors) || 0;
+      const mailUsed = Number(u.emailNotifySentToday) || 0;
+      const mailMax = Number(u.emailNotifyDailyLimit ?? 10);
       return `
-      <article class="card user-card" data-id="${escapeHtml(u.id)}">
-        <div class="user-head">
-          <div>
+      <article class="card user-card user-card-compact${open ? ' is-open' : ''}" data-id="${escapeHtml(u.id)}">
+        <button type="button" class="user-card-toggle" data-action="toggle-user-card" aria-expanded="${open}">
+          <div class="user-card-main">
             <strong>${escapeHtml(u.email)}</strong>
             <p class="meta">${u.role === 'admin' ? 'Administrador' : 'Usuário'} · desde ${formatDate(u.createdAt)}</p>
             ${pending}
           </div>
-          <span class="status ${u.active ? 'ok' : 'error'}">${u.active ? 'ativa' : 'desativada'}</span>
-        </div>
-        <div class="user-grid">
-          <label>
-            Limite de sites
-            <input type="number" min="0" max="1000" class="max-monitors" value="${Number(u.maxMonitors)}" />
-          </label>
-          <p class="meta usage">Em uso: <strong>${u.monitorCount}</strong> / ${u.maxMonitors}</p>
-        </div>
-        <div class="email-admin-box">
-          <label class="check">
-            <input type="checkbox" class="email-allowed" ${u.emailNotifyAllowed ? 'checked' : ''} data-action="toggle-email-allow" />
-            Liberar opção de notificação por e-mail
-          </label>
-          <label>
-            Limite de e-mails por dia
-            <input type="number" min="0" max="500" class="email-daily-limit" value="${Number(
-              u.emailNotifyDailyLimit ?? 10
-            )}" />
-          </label>
-          <p class="meta">
-            Pedido do usuário: <strong>${emailNotifyLabel(emailStatus)}</strong>
-            · hoje ${u.emailNotifySentToday ?? 0}/${u.emailNotifyDailyLimit ?? 10}
-          </p>
-          <div class="actions wrap">
-            <button type="button" class="btn small" data-action="save-email-limit">Salvar limite e-mail</button>
-            ${
-              emailStatus === 'pending'
-                ? `<button type="button" class="btn small" data-action="approve-email">Aprovar e-mail</button>
-                   <button type="button" class="btn small danger" data-action="reject-email">Recusar</button>`
-                : ''
-            }
-            ${
-              emailStatus === 'approved'
-                ? `<button type="button" class="btn small danger" data-action="revoke-email">Revogar e-mail</button>`
-                : ''
-            }
+          <div class="user-usage-summary">
+            <span>Sites <strong>${sitesUsed}/${sitesMax}</strong></span>
+            <span>E-mail hoje <strong>${mailUsed}/${mailMax}</strong></span>
+            <span class="status ${u.active ? 'ok' : 'error'}">${u.active ? 'ativa' : 'desativada'}</span>
           </div>
+          <span class="chevron" aria-hidden="true"></span>
+        </button>
+        <div class="user-card-body"${open ? '' : ' hidden'}>
+          <div class="user-grid">
+            <label>
+              Limite de sites
+              <input type="number" min="0" max="1000" class="max-monitors" value="${sitesMax}" />
+            </label>
+            <p class="meta usage">Em uso: <strong>${sitesUsed}</strong> / ${sitesMax}</p>
+          </div>
+          <div class="email-admin-box">
+            <label class="check">
+              <input type="checkbox" class="email-allowed" ${u.emailNotifyAllowed ? 'checked' : ''} data-action="toggle-email-allow" />
+              Liberar opção de notificação por e-mail
+            </label>
+            <label>
+              Limite de e-mails por dia
+              <input type="number" min="0" max="500" class="email-daily-limit" value="${mailMax}" />
+            </label>
+            <p class="meta">
+              Pedido do usuário: <strong>${emailNotifyLabel(emailStatus)}</strong>
+              · hoje ${mailUsed}/${mailMax}
+            </p>
+            <div class="actions wrap">
+              <button type="button" class="btn small" data-action="save-email-limit">Salvar limite e-mail</button>
+              ${
+                emailStatus === 'pending'
+                  ? `<button type="button" class="btn small" data-action="approve-email">Aprovar e-mail</button>
+                     <button type="button" class="btn small danger" data-action="reject-email">Recusar</button>`
+                  : ''
+              }
+              ${
+                emailStatus === 'approved'
+                  ? `<button type="button" class="btn small danger" data-action="revoke-email">Revogar e-mail</button>`
+                  : ''
+              }
+            </div>
+          </div>
+          <label class="check permanent-check">
+            <input type="checkbox" class="billing-permanent" ${u.billingPermanent ? 'checked' : ''} data-action="toggle-permanent" />
+            Ativar permanentemente (sem expiração de plano)
+          </label>
+          <div class="actions wrap">
+            <button type="button" class="btn small" data-action="save-limit">Salvar limite</button>
+            <button type="button" class="btn small" data-action="toggle">${u.active ? 'Desativar' : 'Ativar'}</button>
+            <button type="button" class="btn small" data-action="password">Nova senha</button>
+            <button type="button" class="btn small" data-action="reset-link">Copiar link</button>
+            <button type="button" class="btn small" data-action="send-email">Enviar e-mail</button>
+            ${u.role === 'admin' ? '' : `<button type="button" class="btn small danger" data-action="delete">Excluir</button>`}
+          </div>
+          <p class="hint reset-link-box" hidden></p>
         </div>
-        <div class="actions wrap">
-          <button type="button" class="btn small" data-action="save-limit">Salvar limite</button>
-          <button type="button" class="btn small" data-action="toggle">${u.active ? 'Desativar' : 'Ativar'}</button>
-          <button type="button" class="btn small" data-action="password">Nova senha</button>
-          <button type="button" class="btn small" data-action="reset-link">Copiar link</button>
-          <button type="button" class="btn small" data-action="send-email">Enviar e-mail</button>
-          ${u.role === 'admin' ? '' : `<button type="button" class="btn small danger" data-action="delete">Excluir</button>`}
-        </div>
-        <p class="hint reset-link-box" hidden></p>
       </article>`;
     })
     .join('');
@@ -876,6 +893,38 @@ els.dashFeed?.addEventListener('click', async (e) => {
 });
 
 els.usersList?.addEventListener('click', async (e) => {
+  const toggleCard = e.target.closest('[data-action="toggle-user-card"]');
+  if (toggleCard) {
+    const card = toggleCard.closest('.user-card');
+    const id = card?.dataset.id;
+    if (!id) return;
+    if (expandedAdminUserIds.has(id)) expandedAdminUserIds.delete(id);
+    else expandedAdminUserIds.add(id);
+    renderUsers(cachedUsers);
+    return;
+  }
+
+  const permanentBox = e.target.closest('.billing-permanent');
+  if (permanentBox && permanentBox.dataset.action === 'toggle-permanent') {
+    const card = permanentBox.closest('.user-card');
+    const id = card?.dataset.id;
+    if (!id) return;
+    const next = permanentBox.checked;
+    try {
+      const data = await api(`/admin/users/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ billingPermanent: next, billingActive: true }),
+      });
+      if (data.user) applyAccountUser(data.user);
+      adminFlash(next ? 'Usuário ativado permanentemente.' : 'Ativação permanente removida.');
+      await refreshAdmin();
+    } catch (err) {
+      permanentBox.checked = !next;
+      adminFlash(err.message, true);
+    }
+    return;
+  }
+
   const allowBox = e.target.closest('.email-allowed');
   if (allowBox) {
     const card = allowBox.closest('.user-card');
@@ -907,7 +956,7 @@ els.usersList?.addEventListener('click', async (e) => {
   }
 
   const btn = e.target.closest('[data-action]');
-  if (!btn) return;
+  if (!btn || btn.dataset.action === 'toggle-user-card') return;
   const card = btn.closest('.user-card');
   const id = card?.dataset.id;
   if (!id) return;
@@ -1226,36 +1275,54 @@ function renderPlansAdmin(plans) {
 }
 
 function renderBillingUsers(users) {
+  cachedBillingUsers = users || [];
   if (!els.billingUsersList) return;
-  els.billingUsersList.innerHTML = (users || [])
+  els.billingUsersList.innerHTML = cachedBillingUsers
     .map((u) => {
       const b = u.billing || {};
+      const open = expandedBillingUserIds.has(u.id);
+      const sitesUsed = Number(u.monitorCount) || 0;
+      const sitesMax = Number(u.maxMonitors) || 0;
+      const permanent = u.billingPermanent === true || b.permanent === true;
       return `
-      <article class="card user-card" data-id="${escapeHtml(u.id)}">
-        <div class="user-head">
-          <div>
+      <article class="card user-card user-card-compact${open ? ' is-open' : ''}" data-id="${escapeHtml(u.id)}">
+        <button type="button" class="user-card-toggle" data-action="toggle-billing-card" aria-expanded="${open}">
+          <div class="user-card-main">
             <strong>${escapeHtml(u.email)}</strong>
             <p class="meta">Status: <strong>${escapeHtml(b.status || '—')}</strong>
-              ${b.expiresAt ? ` · até ${formatDate(b.expiresAt)}` : ''}
+              ${permanent ? ' · permanente' : b.expiresAt ? ` · até ${formatDate(b.expiresAt)}` : ''}
             </p>
           </div>
-          <span class="status ${b.entitled ? 'ok' : 'error'}">${b.entitled ? 'liberado' : 'bloqueado'}</span>
-        </div>
-        <div class="user-grid">
-          <label class="check">
-            <input type="checkbox" class="billing-active" ${u.billingActive !== false ? 'checked' : ''} />
-            Cobrança ativa
-          </label>
-          <label>
-            Expira em
-            <input type="datetime-local" class="billing-expires" value="${toLocalInput(u.billingExpiresAt)}" />
-          </label>
-        </div>
-        <div class="actions wrap">
-          <button type="button" class="btn small" data-action="save-billing-user">Salvar</button>
-          <button type="button" class="btn small" data-action="extend-30">+30 dias</button>
-          <button type="button" class="btn small" data-action="extend-15">+15 dias</button>
-          <button type="button" class="btn small" data-action="extend-1">+1 dia</button>
+          <div class="user-usage-summary">
+            <span>Sites <strong>${sitesUsed}/${sitesMax}</strong></span>
+            <span>Plano <strong>${escapeHtml(b.planId || (permanent ? 'permanente' : '—'))}</strong></span>
+            <span class="status ${b.entitled ? 'ok' : 'error'}">${b.entitled ? 'liberado' : 'bloqueado'}</span>
+          </div>
+          <span class="chevron" aria-hidden="true"></span>
+        </button>
+        <div class="user-card-body"${open ? '' : ' hidden'}>
+          <div class="user-grid billing-user-grid">
+            <label class="check">
+              <input type="checkbox" class="billing-active" ${u.billingActive !== false ? 'checked' : ''} />
+              Cobrança ativa
+            </label>
+            <label class="check">
+              <input type="checkbox" class="billing-permanent" ${permanent ? 'checked' : ''} />
+              Ativar permanentemente
+            </label>
+            <label>
+              Expira em
+              <input type="datetime-local" class="billing-expires" value="${toLocalInput(u.billingExpiresAt)}" ${
+                permanent ? 'disabled' : ''
+              } />
+            </label>
+          </div>
+          <div class="actions wrap">
+            <button type="button" class="btn small" data-action="save-billing-user">Salvar</button>
+            <button type="button" class="btn small" data-action="extend-30">+30 dias</button>
+            <button type="button" class="btn small" data-action="extend-15">+15 dias</button>
+            <button type="button" class="btn small" data-action="extend-1">+1 dia</button>
+          </div>
         </div>
       </article>`;
     })
@@ -1416,8 +1483,19 @@ els.plansAdminForm?.addEventListener('submit', async (e) => {
 });
 
 els.billingUsersList?.addEventListener('click', async (e) => {
+  const toggleCard = e.target.closest('[data-action="toggle-billing-card"]');
+  if (toggleCard) {
+    const card = toggleCard.closest('.user-card');
+    const id = card?.dataset.id;
+    if (!id) return;
+    if (expandedBillingUserIds.has(id)) expandedBillingUserIds.delete(id);
+    else expandedBillingUserIds.add(id);
+    renderBillingUsers(cachedBillingUsers);
+    return;
+  }
+
   const btn = e.target.closest('[data-action]');
-  if (!btn) return;
+  if (!btn || btn.dataset.action === 'toggle-billing-card') return;
   const card = btn.closest('.user-card');
   const id = card?.dataset.id;
   if (!id) return;
@@ -1425,22 +1503,34 @@ els.billingUsersList?.addEventListener('click', async (e) => {
   try {
     if (btn.dataset.action === 'save-billing-user') {
       const billingActive = card.querySelector('.billing-active').checked;
+      const billingPermanent = card.querySelector('.billing-permanent')?.checked === true;
       const local = card.querySelector('.billing-expires').value;
-      const billingExpiresAt = local ? new Date(local).toISOString() : null;
+      const billingExpiresAt = billingPermanent ? null : local ? new Date(local).toISOString() : null;
       await api(`/admin/users/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ billingActive, billingExpiresAt }),
+        body: JSON.stringify({ billingActive, billingPermanent, billingExpiresAt }),
       });
-      billingAdminFlash('Assinatura do usuário atualizada.');
+      billingAdminFlash(
+        billingPermanent ? 'Usuário ativado permanentemente.' : 'Assinatura do usuário atualizada.'
+      );
     }
     if (btn.dataset.action === 'extend-30') {
-      await api(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ billingDaysExtend: 30 }) });
+      await api(`/admin/users/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ billingDaysExtend: 30, billingPermanent: false }),
+      });
     }
     if (btn.dataset.action === 'extend-15') {
-      await api(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ billingDaysExtend: 15 }) });
+      await api(`/admin/users/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ billingDaysExtend: 15, billingPermanent: false }),
+      });
     }
     if (btn.dataset.action === 'extend-1') {
-      await api(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ billingDaysExtend: 1 }) });
+      await api(`/admin/users/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ billingDaysExtend: 1, billingPermanent: false }),
+      });
     }
     await refreshBillingAdmin();
   } catch (err) {

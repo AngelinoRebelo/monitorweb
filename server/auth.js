@@ -168,6 +168,7 @@ function normalizeUser(user, { isFirst = false } = {}) {
     billingPlanId: user.billingPlanId || null,
     billingExpiresAt: user.billingExpiresAt || null,
     billingTrialEndsAt,
+    billingPermanent: user.billingPermanent === true,
     resetTokenHash: user.resetTokenHash || null,
     resetExpires: user.resetExpires || null,
     resetRequestedAt: user.resetRequestedAt || null,
@@ -227,6 +228,7 @@ function publicUser(user) {
     billingPlanId: user.billingPlanId || null,
     billingExpiresAt: user.billingExpiresAt || null,
     billingTrialEndsAt: user.billingTrialEndsAt || null,
+    billingPermanent: user.billingPermanent === true,
     billing,
     resetPending: Boolean(user.resetTokenHash && user.resetExpires && Date.parse(user.resetExpires) > Date.now()),
     resetRequestedAt: user.resetRequestedAt || null,
@@ -706,6 +708,13 @@ adminRouter.patch('/users/:id', (req, res) => {
     patch.emailNotifyStatus = status;
   }
   if (req.body?.billingActive != null) patch.billingActive = Boolean(req.body.billingActive);
+  if (req.body?.billingPermanent != null) {
+    patch.billingPermanent = Boolean(req.body.billingPermanent);
+    if (patch.billingPermanent) {
+      patch.billingActive = true;
+      patch.emailNotifyAllowed = true;
+    }
+  }
   if (req.body?.billingPlanId != null) {
     patch.billingPlanId = req.body.billingPlanId ? String(req.body.billingPlanId) : null;
   }

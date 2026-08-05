@@ -217,7 +217,7 @@ export function getEffectiveMonitorLimit(user) {
   const cfg = getBillingConfig();
   const trialMax = cfg.trialMaxMonitors ?? TRIAL_MAX_MONITORS;
   const state = getBillingState(user);
-  if (state.source === 'paid' || (state.status === 'active' && state.source !== 'trial')) {
+  if (state.source === 'paid' || state.source === 'permanent' || (state.status === 'active' && state.source !== 'trial')) {
     const plan = (cfg.plans || []).find((p) => p.id === (state.planId || user.billingPlanId));
     const fromPlan = plan?.maxMonitors || PAID_DEFAULT_MAX_MONITORS;
     const stored = user.maxMonitors == null ? fromPlan : Number(user.maxMonitors);
@@ -254,6 +254,7 @@ export function getBillingState(user) {
       expiresAt: null,
       trialEndsAt: user.billingTrialEndsAt || null,
       source: 'admin',
+      permanent: true,
     };
   }
 
@@ -271,6 +272,19 @@ export function getBillingState(user) {
       expiresAt: paidExpiresAt,
       trialEndsAt,
       source: null,
+      permanent: false,
+    };
+  }
+
+  if (user.billingPermanent === true) {
+    return {
+      entitled: true,
+      status: 'active',
+      planId: planId || 'permanent',
+      expiresAt: null,
+      trialEndsAt,
+      source: 'permanent',
+      permanent: true,
     };
   }
 
@@ -282,6 +296,7 @@ export function getBillingState(user) {
       expiresAt: paidExpiresAt,
       trialEndsAt,
       source: 'paid',
+      permanent: false,
     };
   }
 
@@ -293,6 +308,7 @@ export function getBillingState(user) {
       expiresAt: trialEndsAt,
       trialEndsAt,
       source: 'trial',
+      permanent: false,
     };
   }
 
@@ -303,6 +319,7 @@ export function getBillingState(user) {
     expiresAt: paidExpiresAt || trialEndsAt,
     trialEndsAt,
     source: null,
+    permanent: false,
   };
 }
 
