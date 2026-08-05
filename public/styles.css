@@ -235,6 +235,122 @@ body {
   border-top: 1px solid var(--line);
 }
 
+.notify-actions {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.notify-btn {
+  justify-content: flex-start;
+  text-align: left;
+  width: 100%;
+  position: relative;
+}
+
+.notify-btn.is-on {
+  border-color: rgba(93, 202, 160, 0.45);
+  color: var(--ink);
+  background: rgba(93, 202, 160, 0.1);
+}
+
+.notify-btn.is-off {
+  opacity: 0.75;
+}
+
+.notify-btn.is-locked {
+  filter: blur(0.2px);
+  opacity: 0.55;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(0, 0, 0, 0.22),
+    rgba(0, 0, 0, 0.22) 6px,
+    rgba(255, 255, 255, 0.03) 6px,
+    rgba(255, 255, 255, 0.03) 12px
+  );
+  border-style: dashed;
+}
+
+.notify-btn.is-locked::after {
+  content: 'bloqueado · assinar';
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.plan-card {
+  display: grid;
+  gap: 0.55rem;
+  padding: 1.1rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.plan-card h3 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.25rem;
+}
+
+.plan-price {
+  font-size: 1.8rem;
+  font-family: var(--display);
+  font-weight: 700;
+  color: var(--accent, #d4a24c);
+}
+
+.plan-price span {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 500;
+  font-family: var(--sans, inherit);
+}
+
+.billing-admin-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.billing-card {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.billing-card h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.plans-admin-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.plan-admin-row {
+  display: grid;
+  grid-template-columns: 1.2fr 0.7fr 0.7fr auto;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+@media (max-width: 900px) {
+  .plans-grid,
+  .billing-admin-grid,
+  .plan-admin-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 
 .brand {
   display: flex;
@@ -927,7 +1043,7 @@ dialog::backdrop {
   }
 
   .side-nav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
   }
 
   .dash-stats {

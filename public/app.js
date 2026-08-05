@@ -8,14 +8,30 @@ const els = {
   btnInstall: $('#btn-install'),
   btnLogout: $('#btn-logout'),
   navAdmin: $('#nav-admin'),
+  navBilling: $('#nav-billing'),
   userEmail: $('#user-email'),
   quotaHint: $('#quota-hint'),
   notifyStatus: $('#notify-status'),
-  browserNotifications: $('#browserNotifications'),
-  desktopNotifications: $('#desktopNotifications'),
-  emailNotifications: $('#emailNotifications'),
+  btnBrowserNotify: $('#btn-browser-notify'),
+  btnDesktopNotify: $('#btn-desktop-notify'),
+  btnEmailNotify: $('#btn-email-notify'),
   emailNotifyBox: $('#email-notify-box'),
   emailNotifyStatus: $('#email-notify-status'),
+  plansGrid: $('#plans-grid'),
+  billingStatus: $('#billing-status'),
+  billingFlash: $('#billing-flash'),
+  billingAdminFlash: $('#billing-admin-flash'),
+  mpConfigForm: $('#mp-config-form'),
+  mpAccessToken: $('#mp-access-token'),
+  mpPublicKey: $('#mp-public-key'),
+  mpWebhookSecret: $('#mp-webhook-secret'),
+  mpEnabled: $('#mp-enabled'),
+  billingTrialDays: $('#billing-trial-days'),
+  mpWebhookUrl: $('#mp-webhook-url'),
+  plansAdminForm: $('#plans-admin-form'),
+  plansAdminList: $('#plans-admin-list'),
+  billingUsersList: $('#billing-users-list'),
+  billingPaymentsList: $('#billing-payments-list'),
   diffDialog: $('#diff-dialog'),
   diffTitle: $('#diff-title'),
   diffSummary: $('#diff-summary'),
@@ -31,18 +47,22 @@ const els = {
 
 let deferredInstall = null;
 let browserNotifyEnabled = true;
+let desktopNotifyEnabled = true;
 let cachedMonitors = [];
 let cachedEvents = [];
 let currentUser = null;
 let currentView = 'dashboard';
 let cachedUsers = [];
+let cachedPlans = [];
 const expandedIds = new Set();
 const expandedDashIds = new Set();
 
 const VIEW_TITLES = {
   dashboard: 'Dashboard',
   monitors: 'Monitores',
+  billing: 'Planos',
   admin: 'Admin',
+  'billing-admin': 'Cobranças',
 };
 
 async function api(path, options = {}) {
@@ -120,9 +140,11 @@ function changesLabel(count) {
 }
 
 function setView(view) {
-  if (view === 'admin' && currentUser?.role !== 'admin') view = 'dashboard';
+  if ((view === 'admin' || view === 'billing-admin') && currentUser?.role !== 'admin') {
+    view = 'dashboard';
+  }
   currentView = view;
-  if (location.hash.replace('#', '') !== view) {
+  if (location.hash.replace('#', '').split('?')[0] !== view) {
     history.replaceState(null, '', `#${view}`);
   }
   document.querySelectorAll('.side-link').forEach((btn) => {
@@ -134,6 +156,10 @@ function setView(view) {
   });
   if (els.viewTitle) els.viewTitle.textContent = VIEW_TITLES[view] || view;
   if (view === 'admin') refreshAdmin().catch((err) => adminFlash(err.message, true));
+  if (view === 'billing') refreshBilling().catch(console.error);
+  if (view === 'billing-admin') {
+    refreshBillingAdmin().catch((err) => billingAdminFlash(err.message, true));
+  }
   if (view === 'dashboard') renderDashboard();
 }
 
@@ -149,28 +175,59 @@ function emailNotifyLabel(status) {
 
 function syncEmailNotifyUi(user) {
   if (!els.emailNotifyBox) return;
-  // Always visible so the user knows the feature exists.
   els.emailNotifyBox.hidden = false;
-  const allowed = user?.emailNotifyAllowed === true;
+  const billing = user?.billing || {};
+  const entitled = billing.entitled === true;
   const status = user?.emailNotifyStatus || 'off';
   const dailyLimit = user?.emailNotifyDailyLimit ?? 10;
   const sentToday = user?.emailNotifySentToday ?? 0;
+  const emailOn = entitled && status === 'approved';
 
-  if (els.emailNotifications) {
-    els.emailNotifications.disabled = !allowed;
-    els.emailNotifications.checked = allowed && (status === 'pending' || status === 'approved');
+  if (els.btnEmailNotify) {
+    els.btnEmailNotify.classList.toggle('is-locked', !entitled);
+    els.btnEmailNotify.classList.toggle('is-on', emailOn);
+    els.btnEmailNotify.classList.toggle('is-off', entitled && !emailOn);
+  }
+
+  if (els.btnBrowserNotify) {
+    els.btnBrowserNotify.classList.toggle('is-on', browserNotifyEnabled);
+    els.btnBrowserNotify.classList.toggle('is-off', !browserNotifyEnabled);
+  }
+  if (els.btnDesktopNotify) {
+    els.btnDesktopNotify.classList.toggle('is-on', desktopNotifyEnabled);
+    els.btnDesktopNotify.classList.toggle('is-off', !desktopNotifyEnabled);
   }
 
   if (els.emailNotifyStatus) {
-    if (!allowed) {
-      els.emailNotifyStatus.textContent =
-        'Aguardando o administrador liberar notificações por e-mail para sua conta.';
+    if (!entitled) {
+      const until = billing.expiresAt ? formatDate(billing.expiresAt) : null;
+      els.emailNotifyStatus.textContent = until
+        ? `Plano expirado em ${until}. Clique no botão para assinar e liberar o e-mail.`
+        : 'Clique no botão bloqueado para ver os planos e liberar alertas por e-mail.';
       els.emailNotifyStatus.classList.add('warn-text');
+    } else if (billing.status === 'trial') {
+      els.emailNotifyStatus.textContent = `Trial ativo até ${formatDate(billing.expiresAt)} · Limite hoje: ${sentToday}/${dailyLimit}${
+        emailOn ? ' · e-mail ligado' : ' · clique para ativar e-mail'
+      }`;
+      els.emailNotifyStatus.classList.remove('warn-text');
     } else {
-      const quota = `Limite hoje: ${sentToday}/${dailyLimit}`;
-      els.emailNotifyStatus.textContent = `${emailNotifyLabel(status)} · ${quota}`;
-      els.emailNotifyStatus.classList.toggle('warn-text', status === 'pending');
+      els.emailNotifyStatus.textContent = `Plano ativo até ${formatDate(billing.expiresAt)} · Limite hoje: ${sentToday}/${dailyLimit}${
+        emailOn ? ' · e-mail ligado' : ' · clique para ativar e-mail'
+      }`;
+      els.emailNotifyStatus.classList.remove('warn-text');
     }
+  }
+
+  if (els.billingStatus && user?.billing) {
+    const map = {
+      trial: 'Período gratuito',
+      active: 'Assinatura ativa',
+      expired: 'Expirado',
+      inactive: 'Cobrança desativada',
+    };
+    els.billingStatus.textContent = `${map[billing.status] || billing.status || '—'}${
+      billing.expiresAt ? ` · válido até ${formatDate(billing.expiresAt)}` : ''
+    }`;
   }
 }
 
@@ -475,13 +532,9 @@ async function refresh() {
   cachedEvents = events;
   renderMonitors(monitors);
   renderDashboard();
-  if (els.browserNotifications) {
-    els.browserNotifications.checked = settings.browserNotifications !== false;
-  }
-  if (els.desktopNotifications) {
-    els.desktopNotifications.checked = settings.desktopNotifications !== false;
-  }
   browserNotifyEnabled = settings.browserNotifications !== false;
+  desktopNotifyEnabled = settings.desktopNotifications !== false;
+  syncEmailNotifyUi(currentUser);
 }
 
 function adminFlash(message, isError = false) {
@@ -698,7 +751,7 @@ document.querySelectorAll('.side-link').forEach((btn) => {
 });
 
 window.addEventListener('hashchange', () => {
-  const view = location.hash.replace('#', '') || 'dashboard';
+  const view = (location.hash.replace('#', '') || 'dashboard').split('?')[0];
   setView(view);
 });
 
@@ -947,34 +1000,292 @@ els.diffDialog?.addEventListener('click', (e) => {
 
 els.btnNotify?.addEventListener('click', () => enableBrowserNotifications());
 
-els.browserNotifications?.addEventListener('change', async () => {
-  browserNotifyEnabled = els.browserNotifications.checked;
+function billingFlash(message, isError = false) {
+  if (!els.billingFlash) return;
+  els.billingFlash.hidden = false;
+  els.billingFlash.textContent = message;
+  els.billingFlash.classList.toggle('warn-text', isError);
+}
+
+function billingAdminFlash(message, isError = false) {
+  if (!els.billingAdminFlash) return;
+  els.billingAdminFlash.hidden = false;
+  els.billingAdminFlash.textContent = message;
+  els.billingAdminFlash.classList.toggle('warn-text', isError);
+}
+
+function renderPlans(plans) {
+  cachedPlans = plans || [];
+  if (!els.plansGrid) return;
+  if (!cachedPlans.length) {
+    els.plansGrid.innerHTML = `<p class="empty">Nenhum plano disponível no momento.</p>`;
+    return;
+  }
+  els.plansGrid.innerHTML = cachedPlans
+    .map(
+      (p) => `
+    <article class="plan-card" data-plan-id="${escapeHtml(p.id)}">
+      <h3>${escapeHtml(p.label)}</h3>
+      <p class="plan-price">R$ ${Number(p.price).toFixed(0)} <span>/ ${Number(p.days)} dia(s)</span></p>
+      <p class="hint">Libera notificações por e-mail durante o período.</p>
+      <button type="button" class="btn primary" data-action="checkout" data-plan-id="${escapeHtml(p.id)}">
+        Assinar com Mercado Pago
+      </button>
+    </article>`
+    )
+    .join('');
+}
+
+async function refreshBilling() {
+  const data = await api('/billing/me');
+  if (data.billing && currentUser) {
+    currentUser = { ...currentUser, billing: data.billing };
+    syncEmailNotifyUi(currentUser);
+  }
+  renderPlans(data.plans || []);
+  const params = new URLSearchParams(location.hash.split('?')[1] || '');
+  const st = params.get('status');
+  if (st === 'success') billingFlash('Pagamento recebido. Assim que o Mercado Pago confirmar, o plano libera automaticamente.');
+  if (st === 'pending') billingFlash('Pagamento pendente. Assim que aprovar, o e-mail será liberado.');
+  if (st === 'failure') billingFlash('Pagamento não concluído. Tente outro plano ou meio.', true);
+}
+
+function renderPlansAdmin(plans) {
+  if (!els.plansAdminList) return;
+  const list = plans?.length
+    ? plans
+    : [
+        { id: 'month', label: '1 mês', days: 30, price: 30, active: true },
+        { id: 'biweek', label: '15 dias', days: 15, price: 20, active: true },
+        { id: 'day', label: '1 dia', days: 1, price: 10, active: true },
+      ];
+  els.plansAdminList.innerHTML = list
+    .map(
+      (p, i) => `
+    <div class="plan-admin-row" data-idx="${i}">
+      <label>Nome<input type="text" class="plan-label" value="${escapeHtml(p.label || '')}" /></label>
+      <label>Dias<input type="number" min="1" class="plan-days" value="${Number(p.days) || 1}" /></label>
+      <label>R$<input type="number" min="0" step="0.01" class="plan-price" value="${Number(p.price) || 0}" /></label>
+      <label class="check"><input type="checkbox" class="plan-active" ${p.active !== false ? 'checked' : ''} /> Ativo</label>
+      <input type="hidden" class="plan-id" value="${escapeHtml(p.id || `plan-${i}`)}" />
+    </div>`
+    )
+    .join('');
+}
+
+function renderBillingUsers(users) {
+  if (!els.billingUsersList) return;
+  els.billingUsersList.innerHTML = (users || [])
+    .map((u) => {
+      const b = u.billing || {};
+      return `
+      <article class="card user-card" data-id="${escapeHtml(u.id)}">
+        <div class="user-head">
+          <div>
+            <strong>${escapeHtml(u.email)}</strong>
+            <p class="meta">Status: <strong>${escapeHtml(b.status || '—')}</strong>
+              ${b.expiresAt ? ` · até ${formatDate(b.expiresAt)}` : ''}
+            </p>
+          </div>
+          <span class="status ${b.entitled ? 'ok' : 'error'}">${b.entitled ? 'liberado' : 'bloqueado'}</span>
+        </div>
+        <div class="user-grid">
+          <label class="check">
+            <input type="checkbox" class="billing-active" ${u.billingActive !== false ? 'checked' : ''} />
+            Cobrança ativa
+          </label>
+          <label>
+            Expira em
+            <input type="datetime-local" class="billing-expires" value="${toLocalInput(u.billingExpiresAt)}" />
+          </label>
+        </div>
+        <div class="actions wrap">
+          <button type="button" class="btn small" data-action="save-billing-user">Salvar</button>
+          <button type="button" class="btn small" data-action="extend-30">+30 dias</button>
+          <button type="button" class="btn small" data-action="extend-15">+15 dias</button>
+          <button type="button" class="btn small" data-action="extend-1">+1 dia</button>
+        </div>
+      </article>`;
+    })
+    .join('');
+}
+
+function toLocalInput(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function renderBillingPayments(payments) {
+  if (!els.billingPaymentsList) return;
+  if (!payments?.length) {
+    els.billingPaymentsList.innerHTML = `<p class="empty">Nenhum pagamento ainda.</p>`;
+    return;
+  }
+  els.billingPaymentsList.innerHTML = payments
+    .map(
+      (p) => `
+    <article class="card">
+      <strong>${escapeHtml(p.planId || 'plano')}</strong>
+      <p class="meta">R$ ${Number(p.amount).toFixed(2)} · ${escapeHtml(p.status)} · ${formatDate(p.createdAt)}</p>
+      <p class="meta">user: ${escapeHtml(p.userId)} ${p.mpPaymentId ? `· MP ${escapeHtml(String(p.mpPaymentId))}` : ''}</p>
+    </article>`
+    )
+    .join('');
+}
+
+async function refreshBillingAdmin() {
+  const data = await api('/admin/billing');
+  if (els.mpWebhookUrl) {
+    els.mpWebhookUrl.textContent = `${location.origin}/api/billing/webhook`;
+  }
+  if (els.mpAccessToken) els.mpAccessToken.value = data.raw?.mercadoPago?.accessToken || '';
+  if (els.mpPublicKey) els.mpPublicKey.value = data.raw?.mercadoPago?.publicKey || '';
+  if (els.mpWebhookSecret) els.mpWebhookSecret.value = data.raw?.mercadoPago?.webhookSecret || '';
+  if (els.mpEnabled) els.mpEnabled.checked = data.raw?.mercadoPago?.enabled !== false;
+  if (els.billingTrialDays) els.billingTrialDays.value = data.raw?.trialDays ?? 30;
+  renderPlansAdmin(data.raw?.plans || data.config?.allPlans || []);
+  renderBillingUsers(data.users || []);
+  renderBillingPayments(data.payments || []);
+}
+
+els.btnBrowserNotify?.addEventListener('click', async () => {
+  browserNotifyEnabled = !browserNotifyEnabled;
   await api('/settings', {
     method: 'PATCH',
     body: JSON.stringify({ browserNotifications: browserNotifyEnabled }),
   });
   if (browserNotifyEnabled) await enableBrowserNotifications();
+  syncEmailNotifyUi(currentUser);
 });
 
-els.desktopNotifications?.addEventListener('change', async () => {
+els.btnDesktopNotify?.addEventListener('click', async () => {
+  desktopNotifyEnabled = !desktopNotifyEnabled;
   await api('/settings', {
     method: 'PATCH',
-    body: JSON.stringify({ desktopNotifications: els.desktopNotifications.checked }),
+    body: JSON.stringify({ desktopNotifications: desktopNotifyEnabled }),
   });
+  syncEmailNotifyUi(currentUser);
 });
 
-els.emailNotifications?.addEventListener('change', async () => {
+els.btnEmailNotify?.addEventListener('click', async () => {
+  const entitled = currentUser?.billing?.entitled === true;
+  if (!entitled) {
+    setView('billing');
+    return;
+  }
+  const enabled = currentUser?.emailNotifyStatus !== 'approved';
   try {
     const data = await api('/auth/email-notify', {
       method: 'POST',
-      body: JSON.stringify({ enabled: els.emailNotifications.checked }),
+      body: JSON.stringify({ enabled }),
     });
     currentUser = data.user;
     syncEmailNotifyUi(currentUser);
-    if (data.message) alert(data.message);
+    if (data.message) billingFlash(data.message);
   } catch (err) {
-    alert(err.message);
+    if (err.message?.includes('plano') || err.message?.includes('Assine')) setView('billing');
+    else alert(err.message);
     syncEmailNotifyUi(currentUser);
+  }
+});
+
+els.plansGrid?.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-action="checkout"]');
+  if (!btn) return;
+  btn.disabled = true;
+  try {
+    const data = await api('/billing/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ planId: btn.dataset.planId }),
+    });
+    if (data.initPoint) {
+      window.location.href = data.initPoint;
+      return;
+    }
+    billingFlash('Checkout criado, mas sem URL do Mercado Pago.', true);
+  } catch (err) {
+    billingFlash(err.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+els.mpConfigForm?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await api('/admin/billing', {
+      method: 'PUT',
+      body: JSON.stringify({
+        trialDays: Number(els.billingTrialDays?.value) || 30,
+        mercadoPago: {
+          accessToken: els.mpAccessToken?.value || '',
+          publicKey: els.mpPublicKey?.value || '',
+          webhookSecret: els.mpWebhookSecret?.value || '',
+          enabled: Boolean(els.mpEnabled?.checked),
+        },
+      }),
+    });
+    billingAdminFlash('Configuração Mercado Pago salva.');
+    await refreshBillingAdmin();
+  } catch (err) {
+    billingAdminFlash(err.message, true);
+  }
+});
+
+els.plansAdminForm?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const rows = [...(els.plansAdminList?.querySelectorAll('.plan-admin-row') || [])];
+  const plans = rows.map((row) => ({
+    id: row.querySelector('.plan-id').value,
+    label: row.querySelector('.plan-label').value.trim(),
+    days: Number(row.querySelector('.plan-days').value) || 1,
+    price: Number(row.querySelector('.plan-price').value) || 0,
+    active: row.querySelector('.plan-active').checked,
+  }));
+  try {
+    await api('/admin/billing', { method: 'PUT', body: JSON.stringify({ plans }) });
+    billingAdminFlash('Planos atualizados.');
+    await refreshBillingAdmin();
+  } catch (err) {
+    billingAdminFlash(err.message, true);
+  }
+});
+
+els.billingUsersList?.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const card = btn.closest('.user-card');
+  const id = card?.dataset.id;
+  if (!id) return;
+  btn.disabled = true;
+  try {
+    if (btn.dataset.action === 'save-billing-user') {
+      const billingActive = card.querySelector('.billing-active').checked;
+      const local = card.querySelector('.billing-expires').value;
+      const billingExpiresAt = local ? new Date(local).toISOString() : null;
+      await api(`/admin/users/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ billingActive, billingExpiresAt }),
+      });
+      billingAdminFlash('Assinatura do usuário atualizada.');
+    }
+    if (btn.dataset.action === 'extend-30') {
+      await api(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ billingDaysExtend: 30 }) });
+    }
+    if (btn.dataset.action === 'extend-15') {
+      await api(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ billingDaysExtend: 15 }) });
+    }
+    if (btn.dataset.action === 'extend-1') {
+      await api(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ billingDaysExtend: 1 }) });
+    }
+    await refreshBillingAdmin();
+  } catch (err) {
+    billingAdminFlash(err.message, true);
+  } finally {
+    btn.disabled = false;
   }
 });
 
@@ -1018,6 +1329,9 @@ updateNotifyUi();
     if (els.navAdmin && me.user?.role === 'admin') {
       els.navAdmin.classList.remove('hidden');
     }
+    if (els.navBilling && me.user?.role === 'admin') {
+      els.navBilling.classList.remove('hidden');
+    }
     syncEmailNotifyUi(me.user);
     if (els.quotaHint && me.quota) {
       els.quotaHint.hidden = false;
@@ -1025,7 +1339,8 @@ updateNotifyUi();
     }
     connectSse();
     await refresh();
-    const initial = location.hash.replace('#', '') || 'dashboard';
+    const hash = location.hash.replace('#', '') || 'dashboard';
+    const initial = hash.split('?')[0] || 'dashboard';
     setView(initial);
   } catch (err) {
     if (!String(err.message).includes('Não autenticado') && els.monitors) {

@@ -17,6 +17,7 @@ import {
   mailProvider,
   sendPasswordResetEmail,
 } from './mail.js';
+import { getBillingState } from './billing.js';
 
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const COOKIE_NAME = 'mw_session';
@@ -145,6 +146,11 @@ function normalizeUser(user, { isFirst = false } = {}) {
     user.emailNotifyDailyLimit == null || Number.isNaN(Number(user.emailNotifyDailyLimit))
       ? DEFAULT_EMAIL_DAILY_LIMIT
       : Math.max(0, Number(user.emailNotifyDailyLimit));
+  const createdAt = user.createdAt || new Date().toISOString();
+  const trialDays = Number(process.env.BILLING_TRIAL_DAYS) || 30;
+  const billingTrialEndsAt =
+    user.billingTrialEndsAt ||
+    new Date(Date.parse(createdAt) + trialDays * 24 * 60 * 60 * 1000).toISOString();
   return {
     ...user,
     role: user.role === 'admin' || isFirst ? 'admin' : 'user',
@@ -158,6 +164,10 @@ function normalizeUser(user, { isFirst = false } = {}) {
     emailNotifyDailyLimit: dailyLimit,
     emailNotifySentDate: user.emailNotifySentDate || null,
     emailNotifySentCount: Number(user.emailNotifySentCount) || 0,
+    billingActive: user.billingActive !== false,
+    billingPlanId: user.billingPlanId || null,
+    billingExpiresAt: user.billingExpiresAt || null,
+    billingTrialEndsAt,
     resetTokenHash: user.resetTokenHash || null,
     resetExpires: user.resetExpires || null,
     resetRequestedAt: user.resetRequestedAt || null,
@@ -199,6 +209,8 @@ function publicUser(user) {
   if (!user) return null;
   const sentToday =
     user.emailNotifySentDate === todayKey() ? Number(user.emailNotifySentCount) || 0 : 0;
+  const billing = getBillingState(user);
+  const allowed = billing.entitled === true;
   return {
     id: user.id,
     email: user.email,
@@ -207,10 +219,15 @@ function publicUser(user) {
     maxMonitors: user.maxMonitors ?? DEFAULT_MAX_MONITORS,
     createdAt: user.createdAt,
     monitorCount: countMonitorsByUser(user.id),
-    emailNotifyAllowed: user.emailNotifyAllowed === true,
-    emailNotifyStatus: user.emailNotifyStatus || 'off',
+    emailNotifyAllowed: allowed,
+    emailNotifyStatus: allowed ? user.emailNotifyStatus || 'off' : 'off',
     emailNotifyDailyLimit: user.emailNotifyDailyLimit ?? DEFAULT_EMAIL_DAILY_LIMIT,
     emailNotifySentToday: sentToday,
+    billingActive: user.billingActive !== false,
+    billingPlanId: user.billingPlanId || null,
+    billingExpiresAt: user.billingExpiresAt || null,
+    billingTrialEndsAt: user.billingTrialEndsAt || null,
+    billing,
     resetPending: Boolean(user.resetTokenHash && user.resetExpires && Date.parse(user.resetExpires) > Date.now()),
     resetRequestedAt: user.resetRequestedAt || null,
   };
@@ -292,6 +309,16 @@ function updateUserRecord(id, patch) {
   return findUserById(id);
 }
 
+/** Public wrappers for billing/webhook modules (avoid circular import issues). */
+export function updateUserRecordPublic(id, patch) {
+  const updated = updateUserRecord(id, patch);
+  return updated ? publicUser(updated) : null;
+}
+
+export function findUserByIdPublic(id) {
+  return findUserById(id);
+}
+
 function createResetTokenForUser(userId) {
   const token = randomBytes(32).toString('hex');
   const expires = new Date(Date.now() + RESET_HOURS * 60 * 60 * 1000).toISOString();
@@ -363,7 +390,8 @@ export function getUserQuota(userId) {
 export function getApprovedEmailNotify(userId) {
   const user = findUserById(userId);
   if (!user || user.active === false) return null;
-  if (user.emailNotifyAllowed !== true) return null;
+  const billing = getBillingState(user);
+  if (!billing.entitled) return null;
   if (user.emailNotifyStatus !== 'approved') return null;
   return {
     email: user.email,
@@ -450,6 +478,8 @@ authRouter.post('/register', (req, res) => {
 
   const users = readUsersRaw();
   const isFirst = users.length === 0;
+  const createdAt = new Date().toISOString();
+  const trialEndsAt = new Date(Date.parse(createdAt) + 30 * 24 * 60 * 60 * 1000).toISOString();
   const user = normalizeUser(
     {
       id: randomUUID(),
@@ -458,7 +488,10 @@ authRouter.post('/register', (req, res) => {
       role: isFirst ? 'admin' : 'user',
       active: true,
       maxMonitors: DEFAULT_MAX_MONITORS,
-      createdAt: new Date().toISOString(),
+      createdAt,
+      billingActive: true,
+      billingTrialEndsAt: trialEndsAt,
+      emailNotifyAllowed: true,
     },
     { isFirst }
   );
@@ -487,7 +520,7 @@ authRouter.post('/logout', (_req, res) => {
   res.json({ ok: true });
 });
 
-/** User requests or cancels e-mail change notifications (needs admin approval to activate). */
+/** User requests or cancels e-mail change notifications (needs billing entitlement). */
 authRouter.post('/email-notify', (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Não autenticado' });
   const user = findUserById(req.user.id);
@@ -510,19 +543,22 @@ authRouter.post('/email-notify', (req, res) => {
     });
   }
 
-  if (user.emailNotifyAllowed !== true) {
-    return res.status(403).json({
-      error: 'O administrador ainda não liberou notificações por e-mail para sua conta.',
+  const billing = getBillingState(user);
+  if (!billing.entitled) {
+    return res.status(402).json({
+      error: 'Assine um plano para liberar notificações por e-mail.',
+      code: 'BILLING_REQUIRED',
+      billing,
     });
   }
-  if (user.emailNotifyStatus === 'approved') {
-    return res.json({ user: publicUser(user), message: 'Notificações por e-mail já estão ativas.' });
-  }
 
-  const updated = updateUserRecord(user.id, { emailNotifyStatus: 'pending' });
+  const updated = updateUserRecord(user.id, {
+    emailNotifyAllowed: true,
+    emailNotifyStatus: 'approved',
+  });
   res.json({
     user: emit(updated),
-    message: 'Pedido enviado. Aguarde a aprovação do administrador.',
+    message: 'Notificações por e-mail ativadas.',
   });
 });
 
@@ -666,12 +702,37 @@ adminRouter.patch('/users/:id', (req, res) => {
     if (!['off', 'pending', 'approved'].includes(status)) {
       return res.status(400).json({ error: 'Status de e-mail inválido' });
     }
-    if (status === 'approved' && user.emailNotifyAllowed !== true && patch.emailNotifyAllowed !== true) {
-      return res.status(400).json({
-        error: 'Libere a opção de e-mail antes de aprovar o pedido do usuário.',
-      });
-    }
     patch.emailNotifyStatus = status;
+  }
+  if (req.body?.billingActive != null) patch.billingActive = Boolean(req.body.billingActive);
+  if (req.body?.billingPlanId != null) {
+    patch.billingPlanId = req.body.billingPlanId ? String(req.body.billingPlanId) : null;
+  }
+  if (req.body?.billingExpiresAt != null) {
+    const raw = String(req.body.billingExpiresAt || '').trim();
+    if (!raw) patch.billingExpiresAt = null;
+    else {
+      const t = Date.parse(raw);
+      if (!Number.isFinite(t)) return res.status(400).json({ error: 'Data de expiração inválida' });
+      patch.billingExpiresAt = new Date(t).toISOString();
+    }
+  }
+  if (req.body?.billingTrialEndsAt != null) {
+    const raw = String(req.body.billingTrialEndsAt || '').trim();
+    if (!raw) patch.billingTrialEndsAt = null;
+    else {
+      const t = Date.parse(raw);
+      if (!Number.isFinite(t)) return res.status(400).json({ error: 'Data de trial inválida' });
+      patch.billingTrialEndsAt = new Date(t).toISOString();
+    }
+  }
+  if (req.body?.billingDaysExtend != null) {
+    const days = Math.max(0, Number(req.body.billingDaysExtend) || 0);
+    const now = Date.now();
+    const currentExp = user.billingExpiresAt ? Date.parse(user.billingExpiresAt) : 0;
+    const base = currentExp > now ? currentExp : now;
+    patch.billingExpiresAt = new Date(base + days * 86400000).toISOString();
+    patch.billingActive = true;
   }
 
   const updated = updateUserRecord(user.id, patch);
@@ -741,4 +802,54 @@ adminRouter.delete('/users/:id', (req, res) => {
   writeUsers(users);
   const deleted = deleteUserData(user.id);
   res.json({ ok: true, deleted });
+});
+
+adminRouter.get('/billing', async (_req, res) => {
+  const { publicBillingConfig, listPayments, getBillingConfig } = await import('./billing.js');
+  const cfg = getBillingConfig();
+  res.json({
+    config: publicBillingConfig(cfg),
+    raw: {
+      trialDays: cfg.trialDays,
+      plans: cfg.plans,
+      mercadoPago: {
+        accessToken: cfg.mercadoPago.accessToken ? '••••' + cfg.mercadoPago.accessToken.slice(-6) : '',
+        publicKey: cfg.mercadoPago.publicKey || '',
+        webhookSecret: cfg.mercadoPago.webhookSecret
+          ? '••••' + cfg.mercadoPago.webhookSecret.slice(-6)
+          : '',
+        enabled: cfg.mercadoPago.enabled,
+        hasAccessToken: Boolean(cfg.mercadoPago.accessToken),
+        hasWebhookSecret: Boolean(cfg.mercadoPago.webhookSecret),
+      },
+    },
+    users: readUsers().map(publicUser),
+    payments: listPayments({ limit: 100 }),
+  });
+});
+
+adminRouter.put('/billing', async (req, res) => {
+  const { saveBillingConfig, getBillingConfig } = await import('./billing.js');
+  const patch = {};
+  if (req.body?.trialDays != null) patch.trialDays = req.body.trialDays;
+  if (Array.isArray(req.body?.plans)) patch.plans = req.body.plans;
+  if (req.body?.mercadoPago) {
+    patch.mercadoPago = { ...req.body.mercadoPago };
+    // Keep previous secrets when masked / empty placeholders are sent
+    const current = getBillingConfig().mercadoPago;
+    if (
+      !patch.mercadoPago.accessToken ||
+      String(patch.mercadoPago.accessToken).startsWith('••••')
+    ) {
+      patch.mercadoPago.accessToken = current.accessToken;
+    }
+    if (
+      !patch.mercadoPago.webhookSecret ||
+      String(patch.mercadoPago.webhookSecret).startsWith('••••')
+    ) {
+      patch.mercadoPago.webhookSecret = current.webhookSecret;
+    }
+  }
+  const config = saveBillingConfig(patch);
+  res.json({ ok: true, config });
 });

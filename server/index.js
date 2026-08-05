@@ -14,6 +14,7 @@ import {
   getOldestUserId,
   ensureUserRoles,
 } from './auth.js';
+import { billingRouter, billingWebhookRouter } from './billing.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
@@ -38,8 +39,12 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' }));
 app.use(attachUser);
 
+// Mercado Pago webhooks must be public (no session)
+app.use('/api/billing', billingWebhookRouter);
+
 app.use('/api/auth', authRouter);
 app.use('/api/admin', requireAuth, adminRouter);
+app.use('/api/billing', requireAuth, billingRouter);
 app.use('/api', requireAuth, routes);
 
 app.use((req, res, next) => {

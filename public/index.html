@@ -33,7 +33,9 @@
         <nav class="side-nav">
           <button type="button" class="side-link is-active" data-view="dashboard">Dashboard</button>
           <button type="button" class="side-link" data-view="monitors">Monitores</button>
+          <button type="button" class="side-link" data-view="billing">Planos</button>
           <button type="button" class="side-link hidden" data-view="admin" id="nav-admin">Admin</button>
+          <button type="button" class="side-link hidden" data-view="billing-admin" id="nav-billing">Cobranças</button>
         </nav>
 
         <div class="sidebar-foot">
@@ -95,21 +97,20 @@
 
               <div class="settings">
                 <h2>Notificações</h2>
-                <label class="check">
-                  <input id="browserNotifications" type="checkbox" checked />
-                  Notificações no navegador / PWA
-                </label>
-                <label class="check">
-                  <input id="desktopNotifications" type="checkbox" checked />
-                  Notificações do sistema (quando rodar local)
-                </label>
+                <div class="notify-actions">
+                  <button type="button" id="btn-browser-notify" class="btn notify-btn is-on" data-notify="browser">
+                    Notificações no navegador / PWA
+                  </button>
+                  <button type="button" id="btn-desktop-notify" class="btn notify-btn is-on" data-notify="desktop">
+                    Notificações do sistema (local)
+                  </button>
+                  <button type="button" id="btn-email-notify" class="btn notify-btn is-locked" data-notify="email">
+                    Notificações por e-mail
+                  </button>
+                </div>
                 <div id="email-notify-box" class="email-notify-box">
-                  <label class="check">
-                    <input id="emailNotifications" type="checkbox" />
-                    Quero receber alterações por e-mail
-                  </label>
                   <p id="email-notify-status" class="hint">
-                    Aguardando o administrador liberar notificações por e-mail para sua conta.
+                    Assine um plano para liberar alertas por e-mail (novas contas: 30 dias grátis).
                   </p>
                 </div>
                 <p id="notify-status" class="hint">Permissão do navegador: desconhecida</p>
@@ -128,6 +129,17 @@
           </div>
         </section>
 
+        <section id="view-billing" class="view">
+          <div class="panel billing-panel">
+            <p class="lead">
+              Escolha um plano para liberar notificações por e-mail. Contas novas têm 30 dias grátis.
+            </p>
+            <p id="billing-status" class="hint"></p>
+            <p id="billing-flash" class="hint" hidden></p>
+            <div id="plans-grid" class="plans-grid"></div>
+          </div>
+        </section>
+
         <section id="view-admin" class="view">
           <div class="panel admin-embed">
             <p class="lead">
@@ -136,6 +148,54 @@
             <p id="mail-status" class="hint"></p>
             <p id="admin-flash" class="hint" hidden></p>
             <div id="users-list" class="users-list"></div>
+          </div>
+        </section>
+
+        <section id="view-billing-admin" class="view">
+          <div class="panel admin-embed">
+            <p class="lead">Cobranças: planos, Mercado Pago e status das assinaturas.</p>
+            <p id="billing-admin-flash" class="hint" hidden></p>
+
+            <div class="billing-admin-grid">
+              <form id="mp-config-form" class="card billing-card">
+                <h2>Mercado Pago</h2>
+                <p class="hint">Cole Access Token, Public Key e Assinatura secreta do webhook.</p>
+                <label>
+                  Access Token (API)
+                  <input id="mp-access-token" type="password" autocomplete="off" placeholder="APP_USR-..." />
+                </label>
+                <label>
+                  Public Key
+                  <input id="mp-public-key" type="text" autocomplete="off" placeholder="APP_USR-..." />
+                </label>
+                <label>
+                  Webhook secret (assinatura secreta)
+                  <input id="mp-webhook-secret" type="password" autocomplete="off" placeholder="segredo do webhook" />
+                </label>
+                <label class="check">
+                  <input id="mp-enabled" type="checkbox" />
+                  Pagamentos ativos
+                </label>
+                <label>
+                  Dias de trial (contas novas)
+                  <input id="billing-trial-days" type="number" min="0" max="365" value="30" />
+                </label>
+                <p class="hint">Webhook: <code id="mp-webhook-url"></code></p>
+                <button type="submit" class="btn primary">Salvar Mercado Pago</button>
+              </form>
+
+              <form id="plans-admin-form" class="card billing-card">
+                <h2>Planos e valores</h2>
+                <div id="plans-admin-list" class="plans-admin-list"></div>
+                <button type="submit" class="btn primary">Salvar planos</button>
+              </form>
+            </div>
+
+            <h2 class="dash-heading">Assinaturas dos usuários</h2>
+            <div id="billing-users-list" class="users-list"></div>
+
+            <h2 class="dash-heading">Pagamentos recentes</h2>
+            <div id="billing-payments-list" class="users-list"></div>
           </div>
         </section>
       </div>
