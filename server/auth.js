@@ -17,7 +17,13 @@ import {
   mailProvider,
   sendPasswordResetEmail,
 } from './mail.js';
-import { getBillingState, getEffectiveMonitorLimit, TRIAL_MAX_MONITORS } from './billing.js';
+import {
+  getBillingState,
+  getEffectiveEmailDailyLimit,
+  getEffectiveMonitorLimit,
+  getTrialDefaults,
+  TRIAL_MAX_MONITORS,
+} from './billing.js';
 
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const COOKIE_NAME = 'mw_session';
@@ -142,22 +148,24 @@ function normalizeUser(user, { isFirst = false } = {}) {
   const status = ['off', 'pending', 'approved'].includes(user.emailNotifyStatus)
     ? user.emailNotifyStatus
     : 'off';
+  const trial = getTrialDefaults();
   const dailyLimit =
     user.emailNotifyDailyLimit == null || Number.isNaN(Number(user.emailNotifyDailyLimit))
-      ? DEFAULT_EMAIL_DAILY_LIMIT
+      ? trial.emailDailyLimit
       : Math.max(0, Number(user.emailNotifyDailyLimit));
   const createdAt = user.createdAt || new Date().toISOString();
-  const trialDays = Number(process.env.BILLING_TRIAL_DAYS) || 30;
   const billingTrialEndsAt =
     user.billingTrialEndsAt ||
-    new Date(Date.parse(createdAt) + trialDays * 24 * 60 * 60 * 1000).toISOString();
+    new Date(Date.parse(createdAt) + trial.days * 24 * 60 * 60 * 1000).toISOString();
   return {
     ...user,
     role: user.role === 'admin' || isFirst ? 'admin' : 'user',
     active: user.active !== false,
     maxMonitors:
       user.maxMonitors == null || Number.isNaN(Number(user.maxMonitors))
-        ? DEFAULT_MAX_MONITORS
+        ? isFirst
+          ? DEFAULT_MAX_MONITORS
+          : trial.maxMonitors
         : Math.max(0, Number(user.maxMonitors)),
     emailNotifyAllowed: user.emailNotifyAllowed === true,
     emailNotifyStatus: status,
@@ -222,7 +230,7 @@ function publicUser(user) {
     monitorCount: countMonitorsByUser(user.id),
     emailNotifyAllowed: allowed,
     emailNotifyStatus: allowed ? user.emailNotifyStatus || 'off' : 'off',
-    emailNotifyDailyLimit: user.emailNotifyDailyLimit ?? DEFAULT_EMAIL_DAILY_LIMIT,
+    emailNotifyDailyLimit: getEffectiveEmailDailyLimit(user),
     emailNotifySentToday: sentToday,
     billingActive: user.billingActive !== false,
     billingPlanId: user.billingPlanId || null,
@@ -380,12 +388,13 @@ export function getUserQuota(userId) {
   if (!user) return { maxMonitors: 0, used: 0, remaining: 0, active: false };
   const used = countMonitorsByUser(userId);
   const maxMonitors = getEffectiveMonitorLimit(user);
+  const trial = getTrialDefaults();
   return {
     maxMonitors,
     used,
     remaining: Math.max(0, maxMonitors - used),
     active: user.active !== false,
-    trialMaxMonitors: TRIAL_MAX_MONITORS,
+    trialMaxMonitors: trial.maxMonitors,
   };
 }
 
@@ -399,7 +408,7 @@ export function getApprovedEmailNotify(userId) {
   return {
     email: user.email,
     userId: user.id,
-    dailyLimit: user.emailNotifyDailyLimit ?? DEFAULT_EMAIL_DAILY_LIMIT,
+    dailyLimit: getEffectiveEmailDailyLimit(user),
   };
 }
 
@@ -409,7 +418,7 @@ export function consumeEmailNotifyQuota(userId) {
   if (!user) return false;
   const today = todayKey();
   const count = user.emailNotifySentDate === today ? Number(user.emailNotifySentCount) || 0 : 0;
-  const limit = user.emailNotifyDailyLimit ?? DEFAULT_EMAIL_DAILY_LIMIT;
+  const limit = getEffectiveEmailDailyLimit(user);
   if (count >= limit) return false;
   updateUserRecord(userId, {
     emailNotifySentDate: today,
@@ -482,7 +491,10 @@ authRouter.post('/register', (req, res) => {
   const users = readUsersRaw();
   const isFirst = users.length === 0;
   const createdAt = new Date().toISOString();
-  const trialEndsAt = new Date(Date.parse(createdAt) + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const trial = getTrialDefaults();
+  const trialEndsAt = new Date(
+    Date.parse(createdAt) + trial.days * 24 * 60 * 60 * 1000
+  ).toISOString();
   const user = normalizeUser(
     {
       id: randomUUID(),
@@ -490,11 +502,12 @@ authRouter.post('/register', (req, res) => {
       passwordHash: hashPassword(password),
       role: isFirst ? 'admin' : 'user',
       active: true,
-      maxMonitors: isFirst ? DEFAULT_MAX_MONITORS : TRIAL_MAX_MONITORS,
+      maxMonitors: isFirst ? DEFAULT_MAX_MONITORS : trial.maxMonitors,
       createdAt,
       billingActive: true,
       billingTrialEndsAt: trialEndsAt,
       emailNotifyAllowed: true,
+      emailNotifyDailyLimit: isFirst ? DEFAULT_EMAIL_DAILY_LIMIT : trial.emailDailyLimit,
     },
     { isFirst }
   );
@@ -822,6 +835,7 @@ adminRouter.get('/billing', async (_req, res) => {
     raw: {
       trialDays: cfg.trialDays,
       trialMaxMonitors: cfg.trialMaxMonitors,
+      trialEmailDailyLimit: cfg.trialEmailDailyLimit,
       plans: cfg.plans,
       mercadoPago: {
         accessToken: cfg.mercadoPago.accessToken ? '••••' + cfg.mercadoPago.accessToken.slice(-6) : '',
@@ -843,6 +857,10 @@ adminRouter.put('/billing', async (req, res) => {
   const { saveBillingConfig, getBillingConfig } = await import('./billing.js');
   const patch = {};
   if (req.body?.trialDays != null) patch.trialDays = req.body.trialDays;
+  if (req.body?.trialMaxMonitors != null) patch.trialMaxMonitors = req.body.trialMaxMonitors;
+  if (req.body?.trialEmailDailyLimit != null) {
+    patch.trialEmailDailyLimit = req.body.trialEmailDailyLimit;
+  }
   if (Array.isArray(req.body?.plans)) patch.plans = req.body.plans;
   if (req.body?.mercadoPago) {
     patch.mercadoPago = { ...req.body.mercadoPago };

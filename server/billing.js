@@ -40,6 +40,7 @@ const DEFAULT_PLANS = [
 
 export const TRIAL_MAX_MONITORS = 5;
 export const PAID_DEFAULT_MAX_MONITORS = 100;
+export const TRIAL_EMAIL_DAILY_LIMIT = 10;
 
 function normalizePlan(p = {}) {
   const maxMonitors = Math.max(
@@ -96,6 +97,7 @@ function defaultConfig() {
   return {
     trialDays: 30,
     trialMaxMonitors: TRIAL_MAX_MONITORS,
+    trialEmailDailyLimit: TRIAL_EMAIL_DAILY_LIMIT,
     plans: DEFAULT_PLANS.map((p) => normalizePlan(p)),
     mercadoPago: {
       accessToken: '',
@@ -127,6 +129,10 @@ export function getBillingConfig() {
       1,
       Math.min(1000, Number(cfg.trialMaxMonitors) || TRIAL_MAX_MONITORS)
     ),
+    trialEmailDailyLimit: Math.max(
+      0,
+      Math.min(500, Number(cfg.trialEmailDailyLimit) ?? TRIAL_EMAIL_DAILY_LIMIT)
+    ),
     plans,
     mercadoPago: mp,
   };
@@ -141,6 +147,10 @@ export function saveBillingConfig(patch = {}) {
       patch.trialMaxMonitors != null
         ? Math.max(1, Math.min(1000, Number(patch.trialMaxMonitors) || TRIAL_MAX_MONITORS))
         : current.trialMaxMonitors,
+    trialEmailDailyLimit:
+      patch.trialEmailDailyLimit != null
+        ? Math.max(0, Math.min(500, Number(patch.trialEmailDailyLimit) || 0))
+        : current.trialEmailDailyLimit,
     plans: Array.isArray(patch.plans)
       ? patch.plans.map((p) => normalizePlan(p))
       : current.plans,
@@ -172,6 +182,7 @@ export function publicBillingConfig(cfg = getBillingConfig()) {
   return {
     trialDays: cfg.trialDays,
     trialMaxMonitors: cfg.trialMaxMonitors ?? TRIAL_MAX_MONITORS,
+    trialEmailDailyLimit: cfg.trialEmailDailyLimit ?? TRIAL_EMAIL_DAILY_LIMIT,
     plans: (cfg.plans || []).filter((p) => p.active !== false),
     allPlans: cfg.plans || [],
     mercadoPago: {
@@ -238,6 +249,34 @@ export function getEffectiveMonitorLimit(user) {
     return Math.max(0, Number(user.maxMonitors));
   }
   return trialMax;
+}
+
+/** Effective daily e-mail alert quota (trial uses Cobranças defaults). */
+export function getEffectiveEmailDailyLimit(user) {
+  if (!user) return 0;
+  const stored =
+    user.emailNotifyDailyLimit == null || Number.isNaN(Number(user.emailNotifyDailyLimit))
+      ? null
+      : Math.max(0, Number(user.emailNotifyDailyLimit));
+  if (user.role === 'admin') {
+    return stored ?? TRIAL_EMAIL_DAILY_LIMIT;
+  }
+  const state = getBillingState(user);
+  if (state.status === 'trial' || state.source === 'trial') {
+    const trialLimit = getBillingConfig().trialEmailDailyLimit ?? TRIAL_EMAIL_DAILY_LIMIT;
+    return stored == null ? trialLimit : Math.min(stored, trialLimit);
+  }
+  return stored ?? TRIAL_EMAIL_DAILY_LIMIT;
+}
+
+/** Defaults applied to new trial accounts (from Cobranças block). */
+export function getTrialDefaults() {
+  const cfg = getBillingConfig();
+  return {
+    days: cfg.trialDays,
+    maxMonitors: cfg.trialMaxMonitors ?? TRIAL_MAX_MONITORS,
+    emailDailyLimit: cfg.trialEmailDailyLimit ?? TRIAL_EMAIL_DAILY_LIMIT,
+  };
 }
 
 export function getBillingState(user) {
@@ -764,10 +803,14 @@ billingRouter.get('/plans', (_req, res) => {
 });
 
 billingRouter.get('/me', (req, res) => {
+  const cfg = publicBillingConfig();
   res.json({
     billing: req.user?.billing || null,
-    plans: publicBillingConfig().plans,
-    mercadoPago: publicBillingConfig().mercadoPago,
+    plans: cfg.plans,
+    trialDays: cfg.trialDays,
+    trialMaxMonitors: cfg.trialMaxMonitors,
+    trialEmailDailyLimit: cfg.trialEmailDailyLimit,
+    mercadoPago: cfg.mercadoPago,
   });
 });
 

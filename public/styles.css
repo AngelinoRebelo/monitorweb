@@ -406,6 +406,18 @@ body {
   font-size: 1.15rem;
 }
 
+.trial-admin-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (max-width: 700px) {
+  .trial-admin-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .plans-admin-list {
   display: grid;
   gap: 0.75rem;

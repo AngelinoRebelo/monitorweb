@@ -111,7 +111,7 @@ router.post('/monitors', (req, res) => {
     const billing = req.user?.billing || {};
     const tip =
       billing.status === 'trial' || billing.source === 'trial'
-        ? ' No trial o limite é 5 sites — assine um plano para monitorar até 100.'
+        ? ` No trial o limite é ${quota.maxMonitors} sites — assine um plano para monitorar mais.`
         : ' Assine ou peça ao administrador para aumentar o limite.';
     return res.status(403).json({
       error: `Limite de sites atingido (${quota.used}/${quota.maxMonitors}).${tip}`,

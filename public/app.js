@@ -35,7 +35,10 @@ const els = {
   mpPublicKey: $('#mp-public-key'),
   mpWebhookSecret: $('#mp-webhook-secret'),
   mpEnabled: $('#mp-enabled'),
+  trialConfigForm: $('#trial-config-form'),
   billingTrialDays: $('#billing-trial-days'),
+  billingTrialEmails: $('#billing-trial-emails'),
+  billingTrialSites: $('#billing-trial-sites'),
   mpWebhookUrl: $('#mp-webhook-url'),
   reconcileForm: $('#reconcile-form'),
   mpReconcileId: $('#mp-reconcile-id'),
@@ -65,6 +68,7 @@ let currentUser = null;
 let currentView = 'dashboard';
 let cachedUsers = [];
 let cachedPlans = [];
+let cachedTrialMaxMonitors = 5;
 let cachedBillingUsers = [];
 const expandedIds = new Set();
 const expandedDashIds = new Set();
@@ -1107,7 +1111,7 @@ function renderPlans(plans) {
       <p class="hint">${
         isActive
           ? `Assinatura vigente${billing.expiresAt ? ` até ${formatDate(billing.expiresAt)}` : ''}. Novo Pix só após o vencimento.`
-          : 'Trial: até 5 sites. Planos pagos: até 100 sites.'
+          : `Trial: até ${cachedTrialMaxMonitors} sites. Planos pagos: até 100 sites.`
       }</p>
       <button type="button" class="btn primary" data-action="checkout" data-plan-id="${escapeHtml(p.id)}"${
         checkoutLocked ? ' disabled aria-disabled="true"' : ''
@@ -1124,6 +1128,9 @@ async function refreshBilling() {
   if (data.billing && currentUser) {
     currentUser = { ...currentUser, billing: data.billing };
     syncEmailNotifyUi(currentUser);
+  }
+  if (data.trialMaxMonitors != null) {
+    cachedTrialMaxMonitors = Number(data.trialMaxMonitors) || 5;
   }
   renderPlans(data.plans || []);
   if (els.billingFlash) {
@@ -1380,6 +1387,10 @@ async function refreshBillingAdmin() {
   if (els.mpWebhookSecret) els.mpWebhookSecret.value = data.raw?.mercadoPago?.webhookSecret || '';
   if (els.mpEnabled) els.mpEnabled.checked = data.raw?.mercadoPago?.enabled !== false;
   if (els.billingTrialDays) els.billingTrialDays.value = data.raw?.trialDays ?? 30;
+  if (els.billingTrialEmails) {
+    els.billingTrialEmails.value = data.raw?.trialEmailDailyLimit ?? 10;
+  }
+  if (els.billingTrialSites) els.billingTrialSites.value = data.raw?.trialMaxMonitors ?? 5;
   renderPlansAdmin(data.raw?.plans || data.config?.allPlans || []);
   renderBillingUsers(data.users || []);
   renderBillingPayments(data.payments || []);
@@ -1432,7 +1443,6 @@ els.mpConfigForm?.addEventListener('submit', async (e) => {
     await api('/admin/billing', {
       method: 'PUT',
       body: JSON.stringify({
-        trialDays: Number(els.billingTrialDays?.value) || 30,
         mercadoPago: {
           accessToken: els.mpAccessToken?.value || '',
           publicKey: els.mpPublicKey?.value || '',
@@ -1442,6 +1452,24 @@ els.mpConfigForm?.addEventListener('submit', async (e) => {
       }),
     });
     billingAdminFlash('Configuração Mercado Pago salva.');
+    await refreshBillingAdmin();
+  } catch (err) {
+    billingAdminFlash(err.message, true);
+  }
+});
+
+els.trialConfigForm?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await api('/admin/billing', {
+      method: 'PUT',
+      body: JSON.stringify({
+        trialDays: Number(els.billingTrialDays?.value) || 0,
+        trialEmailDailyLimit: Number(els.billingTrialEmails?.value) || 0,
+        trialMaxMonitors: Math.max(1, Number(els.billingTrialSites?.value) || 5),
+      }),
+    });
+    billingAdminFlash('Padrão do plano trial salvo.');
     await refreshBillingAdmin();
   } catch (err) {
     billingAdminFlash(err.message, true);

@@ -178,10 +178,6 @@
                   <input id="mp-enabled" type="checkbox" />
                   Pagamentos ativos
                 </label>
-                <label>
-                  Dias de trial (contas novas)
-                  <input id="billing-trial-days" type="number" min="0" max="365" value="30" />
-                </label>
                 <p class="hint">Webhook: <code id="mp-webhook-url"></code></p>
                 <button type="submit" class="btn primary">Salvar Mercado Pago</button>
               </form>
@@ -196,6 +192,26 @@
                   <input id="mp-reconcile-id" type="text" placeholder="ex.: 171262618363" />
                 </label>
                 <button type="submit" class="btn primary">Confirmar e liberar</button>
+              </form>
+
+              <form id="trial-config-form" class="card billing-card">
+                <h2>Plano trial</h2>
+                <p class="hint">Padrão aplicado a toda conta nova em período gratuito.</p>
+                <div class="trial-admin-row">
+                  <label>
+                    Dias
+                    <input id="billing-trial-days" type="number" min="0" max="365" value="30" />
+                  </label>
+                  <label>
+                    E-mails / dia
+                    <input id="billing-trial-emails" type="number" min="0" max="500" value="10" />
+                  </label>
+                  <label>
+                    Sites iniciais
+                    <input id="billing-trial-sites" type="number" min="1" max="1000" value="5" />
+                  </label>
+                </div>
+                <button type="submit" class="btn primary">Salvar trial</button>
               </form>
 
               <form id="plans-admin-form" class="card billing-card">
