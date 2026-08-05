@@ -10,7 +10,7 @@ import {
   getSettings,
   updateSettings,
 } from './db.js';
-import { scheduleMonitor, unscheduleMonitor, rescheduleAll } from './scheduler.js';
+import { scheduleMonitor, unscheduleMonitor, rescheduleAll, runCheck } from './scheduler.js';
 import { addSseClient, removeSseClient } from './notify.js';
 import { changesFromDiffText } from './humanDiff.js';
 import { checkMonitor } from './monitor.js';
@@ -121,6 +121,7 @@ router.post('/monitors', (req, res) => {
     enabled,
   });
   scheduleMonitor(monitor);
+  void runCheck(monitor.id, 'create').catch((err) => console.error('[check] create', err));
   res.status(201).json(publicMonitor(monitor));
 });
 

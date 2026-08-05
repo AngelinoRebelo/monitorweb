@@ -627,7 +627,7 @@ function connectSse() {
   pollTimer = setInterval(() => {
     if (document.hidden) return;
     refresh().catch(console.error);
-  }, 20000);
+  }, 5000);
 
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) refresh().catch(console.error);
