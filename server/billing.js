@@ -253,7 +253,7 @@ export function syncEmailAccessFromBilling(user) {
   };
 }
 
-async function mpFetch(pathname, { method = 'GET', body, accessToken } = {}) {
+async function mpFetch(pathname, { method = 'GET', body, accessToken, headers = {} } = {}) {
   const token = accessToken || getBillingConfig().mercadoPago.accessToken;
   if (!token) throw new Error('Mercado Pago não configurado (access token).');
   const res = await fetch(`https://api.mercadopago.com${pathname}`, {
@@ -262,6 +262,7 @@ async function mpFetch(pathname, { method = 'GET', body, accessToken } = {}) {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       Accept: 'application/json',
+      ...headers,
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -273,12 +274,14 @@ async function mpFetch(pathname, { method = 'GET', body, accessToken } = {}) {
     data = { raw: text };
   }
   if (!res.ok) {
-    const msg = data?.message || data?.error || text || `HTTP ${res.status}`;
+    const cause = Array.isArray(data?.cause) ? data.cause.map((c) => c.description || c.code).join('; ') : '';
+    const msg = cause || data?.message || data?.error || text || `HTTP ${res.status}`;
     throw new Error(`Mercado Pago: ${msg}`);
   }
   return data;
 }
 
+/** Create in-page Pix checkout (QR) instead of redirecting to Checkout Pro. */
 export async function createCheckoutForUser({ user, planId, req }) {
   const cfg = getBillingConfig();
   const plan = (cfg.plans || []).find((p) => p.id === planId && p.active !== false);
@@ -289,29 +292,21 @@ export async function createCheckoutForUser({ user, planId, req }) {
 
   const paymentId = randomUUID();
   const base = appBaseUrl(req);
-  const preference = await mpFetch('/checkout/preferences', {
+  const amount = Number(plan.price);
+  if (!(amount > 0)) throw new Error('Valor do plano inválido.');
+
+  const mpPayment = await mpFetch('/v1/payments', {
     method: 'POST',
+    headers: { 'X-Idempotency-Key': paymentId },
     body: {
-      items: [
-        {
-          id: plan.id,
-          title: `MonitorWeb — e-mail ${plan.label}`,
-          description: `Notificações por e-mail por ${plan.days} dia(s)`,
-          quantity: 1,
-          currency_id: 'BRL',
-          unit_price: Number(plan.price),
-        },
-      ],
-      payer: { email: user.email },
+      transaction_amount: amount,
+      description: `MonitorWeb — e-mail ${plan.label}`,
+      payment_method_id: 'pix',
+      payer: {
+        email: user.email,
+      },
       external_reference: paymentId,
       notification_url: `${base}/api/billing/webhook`,
-      back_urls: {
-        success: `${base}/#billing?status=success`,
-        pending: `${base}/#billing?status=pending`,
-        failure: `${base}/#billing?status=failure`,
-      },
-      auto_return: 'approved',
-      statement_descriptor: 'MONITORWEB',
       metadata: {
         user_id: user.id,
         plan_id: plan.id,
@@ -320,23 +315,63 @@ export async function createCheckoutForUser({ user, planId, req }) {
     },
   });
 
+  const tx = mpPayment.point_of_interaction?.transaction_data || {};
   const record = {
     id: paymentId,
     userId: user.id,
     planId: plan.id,
-    amount: Number(plan.price),
+    amount,
     days: Number(plan.days),
-    status: 'pending',
-    mpPreferenceId: preference.id,
-    mpPaymentId: null,
-    initPoint: preference.init_point || preference.sandbox_init_point || null,
+    status: mpPayment.status === 'approved' ? 'approved' : 'pending',
+    mpPreferenceId: null,
+    mpPaymentId: mpPayment.id != null ? String(mpPayment.id) : null,
+    initPoint: tx.ticket_url || null,
+    qrCode: tx.qr_code || null,
     createdAt: new Date().toISOString(),
-    paidAt: null,
+    paidAt: mpPayment.status === 'approved' ? new Date().toISOString() : null,
   };
   const list = readPayments();
   list.push(record);
   writePayments(list);
-  return { payment: record, initPoint: record.initPoint, preferenceId: preference.id };
+
+  return {
+    payment: {
+      id: record.id,
+      planId: record.planId,
+      amount: record.amount,
+      days: record.days,
+      status: record.status,
+      mpPaymentId: record.mpPaymentId,
+      createdAt: record.createdAt,
+    },
+    plan: { id: plan.id, label: plan.label, days: plan.days, price: plan.price },
+    mpPaymentId: record.mpPaymentId,
+    status: mpPayment.status,
+    qrCode: tx.qr_code || null,
+    qrCodeBase64: tx.qr_code_base64 || null,
+    ticketUrl: tx.ticket_url || null,
+  };
+}
+
+export async function getCheckoutStatus(localPaymentId, userId) {
+  const payments = readPayments();
+  const record = payments.find((p) => p.id === localPaymentId && p.userId === userId);
+  if (!record) return null;
+  if (!record.mpPaymentId) {
+    return { payment: record, status: record.status };
+  }
+  try {
+    const mpPayment = await fetchMpPayment(record.mpPaymentId);
+    return {
+      payment: record,
+      status: mpPayment.status,
+      statusDetail: mpPayment.status_detail,
+      mpPaymentId: String(mpPayment.id),
+      approved: mpPayment.status === 'approved',
+    };
+  } catch {
+    return { payment: record, status: record.status };
+  }
 }
 
 async function fetchMpPayment(paymentId) {
@@ -558,13 +593,42 @@ billingRouter.get('/me', (req, res) => {
 billingRouter.post('/checkout', async (req, res) => {
   try {
     const auth = await import('./auth.js');
+    const notify = await import('./notify.js');
     const user = auth.findUserByIdPublic(req.user.id);
     if (!user) return res.status(401).json({ error: 'Não autenticado' });
     const planId = String(req.body?.planId || '');
     const result = await createCheckoutForUser({ user, planId, req });
+    if (result.status === 'approved' && result.mpPaymentId) {
+      await applyApprovedMpPayment(await fetchMpPayment(result.mpPaymentId), {
+        updateUser: (id, patch) => auth.updateUserRecordPublic(id, patch),
+        findUser: (id) => auth.findUserByIdPublic(id),
+        notifyAccount: (u) => notify.notifyAccount(u),
+      });
+    }
     res.status(201).json(result);
   } catch (err) {
     res.status(400).json({ error: err?.message || 'Falha ao criar pagamento' });
+  }
+});
+
+billingRouter.get('/checkout/:id/status', async (req, res) => {
+  try {
+    const auth = await import('./auth.js');
+    const notify = await import('./notify.js');
+    const status = await getCheckoutStatus(req.params.id, req.user.id);
+    if (!status) return res.status(404).json({ error: 'Pagamento não encontrado' });
+
+    if (status.approved && status.mpPaymentId) {
+      const applied = await applyApprovedMpPayment(await fetchMpPayment(status.mpPaymentId), {
+        updateUser: (id, patch) => auth.updateUserRecordPublic(id, patch),
+        findUser: (id) => auth.findUserByIdPublic(id),
+        notifyAccount: (u) => notify.notifyAccount(u),
+      });
+      return res.json({ ...status, ...applied });
+    }
+    res.json(status);
+  } catch (err) {
+    res.status(400).json({ error: err?.message || 'Falha ao consultar pagamento' });
   }
 });
 

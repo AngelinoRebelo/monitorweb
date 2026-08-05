@@ -21,6 +21,15 @@ const els = {
   billingStatus: $('#billing-status'),
   billingFlash: $('#billing-flash'),
   billingAdminFlash: $('#billing-admin-flash'),
+  pixDialog: $('#pix-dialog'),
+  pixTitle: $('#pix-title'),
+  pixSummary: $('#pix-summary'),
+  pixClose: $('#pix-close'),
+  pixQrImg: $('#pix-qr-img'),
+  pixWaiting: $('#pix-waiting'),
+  pixCopyCode: $('#pix-copy-code'),
+  pixCopyBtn: $('#pix-copy-btn'),
+  pixStatus: $('#pix-status'),
   mpConfigForm: $('#mp-config-form'),
   mpAccessToken: $('#mp-access-token'),
   mpPublicKey: $('#mp-public-key'),
@@ -1031,7 +1040,7 @@ function renderPlans(plans) {
       <p class="plan-price">R$ ${Number(p.price).toFixed(0)} <span>/ ${Number(p.days)} dia(s)</span></p>
       <p class="hint">Libera notificações por e-mail durante o período.</p>
       <button type="button" class="btn primary" data-action="checkout" data-plan-id="${escapeHtml(p.id)}">
-        Assinar com Mercado Pago
+        Pagar com Pix
       </button>
     </article>`
     )
@@ -1045,12 +1054,116 @@ async function refreshBilling() {
     syncEmailNotifyUi(currentUser);
   }
   renderPlans(data.plans || []);
-  const params = new URLSearchParams(location.hash.split('?')[1] || '');
-  const st = params.get('status');
-  if (st === 'success') billingFlash('Pagamento recebido. Assim que o Mercado Pago confirmar, o plano libera automaticamente.');
-  if (st === 'pending') billingFlash('Pagamento pendente. Assim que aprovar, o e-mail será liberado.');
-  if (st === 'failure') billingFlash('Pagamento não concluído. Tente outro plano ou meio.', true);
+  if (els.billingFlash) {
+    // Clear stale redirect messages when subscription is already active.
+    if (data.billing?.entitled) {
+      els.billingFlash.hidden = true;
+      els.billingFlash.textContent = '';
+      if (location.hash.includes('status=')) {
+        history.replaceState(null, '', '#billing');
+      }
+    }
+  }
 }
+
+let pixPollTimer = null;
+
+function stopPixPoll() {
+  if (pixPollTimer) {
+    clearInterval(pixPollTimer);
+    pixPollTimer = null;
+  }
+}
+
+function closePixDialog() {
+  stopPixPoll();
+  els.pixDialog?.close();
+}
+
+function openPixDialog(payload) {
+  if (!els.pixDialog) return;
+  const plan = payload.plan || {};
+  if (els.pixTitle) els.pixTitle.textContent = 'Pagar com Pix';
+  if (els.pixSummary) {
+    els.pixSummary.textContent = `${plan.label || 'Plano'} · R$ ${Number(plan.price || payload.payment?.amount || 0).toFixed(2)}`;
+  }
+  if (els.pixCopyCode) els.pixCopyCode.value = payload.qrCode || '';
+  if (els.pixStatus) els.pixStatus.textContent = 'Escaneie o QR ou copie o código no app do banco.';
+  if (els.pixWaiting) els.pixWaiting.textContent = 'Aguardando confirmação do pagamento…';
+
+  if (els.pixQrImg) {
+    if (payload.qrCodeBase64) {
+      els.pixQrImg.src = `data:image/png;base64,${payload.qrCodeBase64}`;
+      els.pixQrImg.hidden = false;
+    } else {
+      els.pixQrImg.hidden = true;
+      els.pixQrImg.removeAttribute('src');
+    }
+  }
+
+  if (!els.pixDialog.open) els.pixDialog.showModal();
+
+  stopPixPoll();
+  const localId = payload.payment?.id;
+  if (!localId) return;
+
+  pixPollTimer = setInterval(async () => {
+    try {
+      const st = await api(`/billing/checkout/${localId}/status`);
+      if (st.approved || st.activated || st.already) {
+        stopPixPoll();
+        if (els.pixWaiting) els.pixWaiting.textContent = 'Pagamento confirmado!';
+        if (els.pixStatus) els.pixStatus.textContent = 'Plano liberado. Você já pode ativar o e-mail.';
+        await refreshSessionUi();
+        await refreshBilling();
+        setTimeout(() => closePixDialog(), 1200);
+      } else if (els.pixStatus) {
+        els.pixStatus.textContent = `Status: ${st.status || 'pending'}`;
+      }
+    } catch {
+      /* keep polling */
+    }
+  }, 3000);
+}
+
+els.plansGrid?.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-action="checkout"]');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = 'Gerando Pix…';
+  try {
+    const data = await api('/billing/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ planId: btn.dataset.planId }),
+    });
+    if (!data.qrCode && !data.qrCodeBase64) {
+      billingFlash('Não foi possível gerar o QR Code Pix. Verifique o Mercado Pago.', true);
+      return;
+    }
+    openPixDialog(data);
+  } catch (err) {
+    billingFlash(err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Pagar com Pix';
+  }
+});
+
+els.pixClose?.addEventListener('click', () => closePixDialog());
+els.pixDialog?.addEventListener('click', (e) => {
+  if (e.target === els.pixDialog) closePixDialog();
+});
+els.pixCopyBtn?.addEventListener('click', async () => {
+  const code = els.pixCopyCode?.value || '';
+  if (!code) return;
+  try {
+    await navigator.clipboard.writeText(code);
+    if (els.pixStatus) els.pixStatus.textContent = 'Código Pix copiado.';
+  } catch {
+    els.pixCopyCode?.select();
+    if (els.pixStatus) els.pixStatus.textContent = 'Selecione e copie o código manualmente.';
+  }
+});
 
 function renderPlansAdmin(plans) {
   if (!els.plansAdminList) return;
@@ -1191,27 +1304,6 @@ els.btnEmailNotify?.addEventListener('click', async () => {
     if (err.message?.includes('plano') || err.message?.includes('Assine')) setView('billing');
     else alert(err.message);
     syncEmailNotifyUi(currentUser);
-  }
-});
-
-els.plansGrid?.addEventListener('click', async (e) => {
-  const btn = e.target.closest('[data-action="checkout"]');
-  if (!btn) return;
-  btn.disabled = true;
-  try {
-    const data = await api('/billing/checkout', {
-      method: 'POST',
-      body: JSON.stringify({ planId: btn.dataset.planId }),
-    });
-    if (data.initPoint) {
-      window.location.href = data.initPoint;
-      return;
-    }
-    billingFlash('Checkout criado, mas sem URL do Mercado Pago.', true);
-  } catch (err) {
-    billingFlash(err.message, true);
-  } finally {
-    btn.disabled = false;
   }
 });
 

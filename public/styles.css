@@ -351,6 +351,56 @@ body {
   }
 }
 
+.pix-dialog {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 0;
+  background: #0c1a14;
+  color: var(--ink);
+  max-width: min(420px, 94vw);
+  width: 100%;
+}
+
+.pix-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.pix-body {
+  padding: 1rem 1.1rem 1.2rem;
+}
+
+.pix-content {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: center;
+  text-align: center;
+}
+
+.pix-qr {
+  width: min(240px, 70vw);
+  height: auto;
+  border-radius: 12px;
+  background: #fff;
+  padding: 0.55rem;
+}
+
+.pix-copy-label {
+  width: 100%;
+  text-align: left;
+}
+
+.pix-copy-label textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--ink);
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
 
 .brand {
   display: flex;

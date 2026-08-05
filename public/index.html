@@ -226,6 +226,30 @@
       </div>
     </dialog>
 
+    <dialog id="pix-dialog" class="pix-dialog">
+      <div class="dialog-body pix-body">
+        <header>
+          <div>
+            <h3 id="pix-title">Pagar com Pix</h3>
+            <p id="pix-summary" class="diff-summary"></p>
+          </div>
+          <button type="button" id="pix-close" class="btn ghost">Fechar</button>
+        </header>
+        <div class="pix-content">
+          <img id="pix-qr-img" class="pix-qr" alt="QR Code Pix" hidden />
+          <p id="pix-waiting" class="hint">Aguardando pagamento…</p>
+          <label class="pix-copy-label">
+            Pix copia e cola
+            <textarea id="pix-copy-code" rows="3" readonly></textarea>
+          </label>
+          <div class="actions wrap">
+            <button type="button" id="pix-copy-btn" class="btn primary">Copiar código</button>
+          </div>
+          <p id="pix-status" class="hint"></p>
+        </div>
+      </div>
+    </dialog>
+
     <script src="/app.js" type="module"></script>
   </body>
 </html>
