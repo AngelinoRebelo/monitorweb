@@ -208,12 +208,20 @@ body {
 
 .email-admin-box {
   margin: 0.75rem 0 1rem;
-  padding: 0.85rem;
+  padding: 0.7rem 0.8rem;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: rgba(0, 0, 0, 0.16);
   display: grid;
-  gap: 0.55rem;
+  gap: 0.45rem;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.email-admin-box .email-daily-limit {
+  width: 100%;
+  min-width: 0;
+  padding: 0.5rem 0.65rem;
 }
 
 .email-notify-box {
