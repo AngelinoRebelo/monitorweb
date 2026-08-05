@@ -493,11 +493,19 @@ authRouter.post('/email-notify', (req, res) => {
   const user = findUserById(req.user.id);
   if (!user) return res.status(401).json({ error: 'Não autenticado' });
 
+  const emit = (u) => {
+    const pub = publicUser(u);
+    import('./notify.js')
+      .then((m) => m.notifyAccount(pub))
+      .catch(() => {});
+    return pub;
+  };
+
   const want = Boolean(req.body?.enabled);
   if (!want) {
     const updated = updateUserRecord(user.id, { emailNotifyStatus: 'off' });
     return res.json({
-      user: publicUser(updated),
+      user: emit(updated),
       message: 'Notificações por e-mail desativadas.',
     });
   }
@@ -513,7 +521,7 @@ authRouter.post('/email-notify', (req, res) => {
 
   const updated = updateUserRecord(user.id, { emailNotifyStatus: 'pending' });
   res.json({
-    user: publicUser(updated),
+    user: emit(updated),
     message: 'Pedido enviado. Aguarde a aprovação do administrador.',
   });
 });
@@ -667,7 +675,11 @@ adminRouter.patch('/users/:id', (req, res) => {
   }
 
   const updated = updateUserRecord(user.id, patch);
-  res.json({ user: publicUser(updated) });
+  const pub = publicUser(updated);
+  import('./notify.js')
+    .then((m) => m.notifyAccount(pub))
+    .catch(() => {});
+  res.json({ user: pub });
 });
 
 adminRouter.post('/users/:id/password', (req, res) => {

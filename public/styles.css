@@ -214,14 +214,19 @@ body {
   background: rgba(0, 0, 0, 0.16);
   display: grid;
   gap: 0.45rem;
-  width: fit-content;
-  max-width: 100%;
+  width: max-content;
+  max-width: min(100%, 22rem);
+  box-sizing: border-box;
 }
 
 .email-admin-box .email-daily-limit {
-  width: 100%;
-  min-width: 0;
-  padding: 0.5rem 0.65rem;
+  width: 5.5rem;
+  max-width: 100%;
+  padding: 0.45rem 0.55rem;
+}
+
+.email-admin-box .actions.wrap {
+  gap: 0.4rem;
 }
 
 .email-notify-box {

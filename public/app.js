@@ -174,6 +174,42 @@ function syncEmailNotifyUi(user) {
   }
 }
 
+function syncQuotaUi(quota) {
+  if (!els.quotaHint || !quota) return;
+  els.quotaHint.hidden = false;
+  els.quotaHint.textContent = `Sites: ${quota.used} de ${quota.maxMonitors} disponíveis.`;
+}
+
+function applyAccountUser(user) {
+  if (!user?.id) return;
+  const idx = cachedUsers.findIndex((u) => u.id === user.id);
+  if (idx >= 0) cachedUsers[idx] = { ...cachedUsers[idx], ...user };
+  else if (currentUser?.role === 'admin') cachedUsers = [...cachedUsers, user];
+
+  if (currentUser?.id === user.id) {
+    currentUser = { ...currentUser, ...user };
+    syncEmailNotifyUi(currentUser);
+    if (els.quotaHint && user.maxMonitors != null && user.monitorCount != null) {
+      syncQuotaUi({ used: user.monitorCount, maxMonitors: user.maxMonitors });
+    }
+  }
+
+  if (currentView === 'admin' && currentUser?.role === 'admin') {
+    renderUsers(cachedUsers);
+  }
+}
+
+async function refreshSessionUi() {
+  try {
+    const me = await api('/auth/me');
+    currentUser = me.user;
+    syncEmailNotifyUi(currentUser);
+    syncQuotaUi(me.quota);
+  } catch {
+    /* ignore */
+  }
+}
+
 function updateNotifyUi() {
   const perm = 'Notification' in window ? Notification.permission : 'unsupported';
   const map = {
@@ -615,6 +651,22 @@ function connectSse() {
       statusTimer = setTimeout(() => scheduleRefresh(100), 300);
     });
 
+    es.addEventListener('account', (ev) => {
+      let payload = {};
+      try {
+        payload = JSON.parse(ev.data);
+      } catch {
+        /* ignore */
+      }
+      if (payload.user) applyAccountUser(payload.user);
+      if (payload.user && currentUser?.id === payload.user.id) {
+        refreshSessionUi().catch(() => {});
+      }
+      if (currentUser?.role === 'admin' && currentView === 'admin') {
+        refreshAdmin().catch(console.error);
+      }
+    });
+
     es.onerror = () => {
       els.live.textContent = 'reconectando…';
       els.live.classList.remove('live');
@@ -767,19 +819,21 @@ els.usersList?.addEventListener('click', async (e) => {
     const user = cachedUsers.find((u) => u.id === id);
     const next = allowBox.checked;
     try {
-      await api(`/admin/users/${id}`, {
+      const data = await api(`/admin/users/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           emailNotifyAllowed: next,
           ...(next ? {} : { emailNotifyStatus: 'off' }),
         }),
       });
+      if (data.user) applyAccountUser(data.user);
       adminFlash(
         next
           ? `Opção de e-mail liberada para ${user.email}. Peça ao usuário para marcar a caixa em Monitores.`
           : `Opção de e-mail bloqueada para ${user.email}.`
       );
       await refreshAdmin();
+      await refreshSessionUi();
     } catch (err) {
       allowBox.checked = !next;
       adminFlash(err.message, true);
@@ -798,32 +852,39 @@ els.usersList?.addEventListener('click', async (e) => {
   try {
     if (action === 'save-limit') {
       const maxMonitors = Number(card.querySelector('.max-monitors').value);
-      await api(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ maxMonitors }) });
+      const data = await api(`/admin/users/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ maxMonitors }),
+      });
+      if (data.user) applyAccountUser(data.user);
       adminFlash(`Limite de sites de ${user.email} atualizado.`);
     }
     if (action === 'save-email-limit') {
       const emailNotifyDailyLimit = Number(card.querySelector('.email-daily-limit').value);
-      await api(`/admin/users/${id}`, {
+      const data = await api(`/admin/users/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({ emailNotifyDailyLimit }),
       });
+      if (data.user) applyAccountUser(data.user);
       adminFlash(`Limite diário de e-mails de ${user.email}: ${emailNotifyDailyLimit}.`);
     }
     if (action === 'toggle-email-allow') {
       // handled by checkbox above
     }
     if (action === 'approve-email') {
-      await api(`/admin/users/${id}`, {
+      const data = await api(`/admin/users/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({ emailNotifyAllowed: true, emailNotifyStatus: 'approved' }),
       });
+      if (data.user) applyAccountUser(data.user);
       adminFlash(`Notificações por e-mail aprovadas para ${user.email}.`);
     }
     if (action === 'reject-email' || action === 'revoke-email') {
-      await api(`/admin/users/${id}`, {
+      const data = await api(`/admin/users/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({ emailNotifyStatus: 'off' }),
       });
+      if (data.user) applyAccountUser(data.user);
       adminFlash(
         action === 'revoke-email'
           ? `E-mail revogado para ${user.email}.`
@@ -831,10 +892,11 @@ els.usersList?.addEventListener('click', async (e) => {
       );
     }
     if (action === 'toggle') {
-      await api(`/admin/users/${id}`, {
+      const data = await api(`/admin/users/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({ active: !user.active }),
       });
+      if (data.user) applyAccountUser(data.user);
       adminFlash(`Conta ${user.email} ${user.active ? 'desativada' : 'ativada'}.`);
     }
     if (action === 'password') {
@@ -866,9 +928,11 @@ els.usersList?.addEventListener('click', async (e) => {
     if (action === 'delete') {
       if (!confirm(`Excluir ${user.email} e todos os monitores dele?`)) return;
       await api(`/admin/users/${id}`, { method: 'DELETE' });
+      cachedUsers = cachedUsers.filter((u) => u.id !== id);
       adminFlash(`Usuário ${user.email} excluído.`);
     }
     await refreshAdmin();
+    await refreshSessionUi();
   } catch (err) {
     adminFlash(err.message, true);
   } finally {

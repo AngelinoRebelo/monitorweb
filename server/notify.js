@@ -105,3 +105,13 @@ export function notifyStatus(message, extra = {}) {
   const userId = extra.userId || null;
   broadcast('status', { message, ...extra, at: new Date().toISOString() }, { userId });
 }
+
+/** Push account/profile changes so open sessions update without reload. */
+export function notifyAccount(user, extra = {}) {
+  if (!user?.id) return;
+  broadcast(
+    'account',
+    { user, ...extra, at: new Date().toISOString() },
+    {} // all connected clients; UI filters by user / admin view
+  );
+}
