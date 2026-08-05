@@ -378,13 +378,6 @@ body {
   background: #d4a24c;
 }
 
-.plan-admin-row {
-  display: grid;
-  grid-template-columns: 1.1fr 0.55fr 0.55fr 0.55fr auto;
-  gap: 0.5rem;
-  align-items: end;
-}
-
 .plan-features-field {
   grid-column: 1 / -1;
 }
@@ -394,6 +387,7 @@ body {
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
   margin: 1rem 0 1.5rem;
+  align-items: start;
 }
 
 .billing-card {
@@ -406,21 +400,90 @@ body {
   font-size: 1.15rem;
 }
 
+.billing-card-compact {
+  gap: 0.45rem;
+  padding: 0.85rem 0.95rem;
+  align-content: start;
+}
+
+.billing-card-compact h2 {
+  font-size: 1.05rem;
+}
+
+.billing-card-compact .hint {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+
+.billing-card-compact label {
+  font-size: 0.82rem;
+  gap: 0.25rem;
+}
+
+.billing-card-compact input[type='number'] {
+  padding: 0.4rem 0.5rem;
+  font-size: 0.9rem;
+}
+
+.billing-card-compact .btn.primary {
+  margin-top: 0.15rem;
+  justify-self: start;
+}
+
 .trial-admin-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
+  gap: 0.45rem;
+}
+
+.plans-admin-head {
+  margin-bottom: 0;
+}
+
+.plans-admin-head h2 {
+  margin: 0;
+}
+
+.plans-admin-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.plan-admin-row {
+  display: grid;
+  grid-template-columns: 1.1fr 0.55fr 0.55fr 0.55fr auto;
+  gap: 0.4rem;
+  align-items: end;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.plan-admin-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.plan-admin-row label {
+  font-size: 0.82rem;
+  gap: 0.25rem;
+}
+
+.plan-admin-row input,
+.plan-admin-row textarea {
+  padding: 0.4rem 0.5rem;
+  font-size: 0.9rem;
+}
+
+.plan-features-field textarea {
+  min-height: 2.4rem;
+  resize: vertical;
 }
 
 @media (max-width: 700px) {
   .trial-admin-row {
     grid-template-columns: 1fr;
   }
-}
-
-.plans-admin-list {
-  display: grid;
-  gap: 0.75rem;
 }
 
 @media (max-width: 900px) {

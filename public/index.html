@@ -194,9 +194,9 @@
                 <button type="submit" class="btn primary">Confirmar e liberar</button>
               </form>
 
-              <form id="trial-config-form" class="card billing-card">
+              <form id="trial-config-form" class="card billing-card billing-card-compact">
                 <h2>Plano trial</h2>
-                <p class="hint">Padrão aplicado a toda conta nova em período gratuito.</p>
+                <p class="hint">Padrão das contas novas no período gratuito.</p>
                 <div class="trial-admin-row">
                   <label>
                     Dias
@@ -211,11 +211,14 @@
                     <input id="billing-trial-sites" type="number" min="1" max="1000" value="5" />
                   </label>
                 </div>
-                <button type="submit" class="btn primary">Salvar trial</button>
+                <button type="submit" class="btn primary small">Salvar trial</button>
               </form>
 
               <form id="plans-admin-form" class="card billing-card">
-                <h2>Planos e valores</h2>
+                <div class="section-head plans-admin-head">
+                  <h2>Planos e valores</h2>
+                  <button type="button" id="btn-add-plan" class="btn small">Novo plano</button>
+                </div>
                 <div id="plans-admin-list" class="plans-admin-list"></div>
                 <button type="submit" class="btn primary">Salvar planos</button>
               </form>

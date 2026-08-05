@@ -47,6 +47,7 @@ const els = {
   mpReconcileId: $('#mp-reconcile-id'),
   plansAdminForm: $('#plans-admin-form'),
   plansAdminList: $('#plans-admin-list'),
+  btnAddPlan: $('#btn-add-plan'),
   billingUsersList: $('#billing-users-list'),
   billingPaymentsList: $('#billing-payments-list'),
   diffDialog: $('#diff-dialog'),
@@ -1328,6 +1329,40 @@ function renderPlansAdmin(plans) {
     .join('');
 }
 
+function collectPlansAdminFromDom() {
+  const rows = [...(els.plansAdminList?.querySelectorAll('.plan-admin-row') || [])];
+  return rows.map((row, i) => ({
+    id: row.querySelector('.plan-id')?.value || `plan-${Date.now()}-${i}`,
+    label: row.querySelector('.plan-label')?.value.trim() || '',
+    days: Number(row.querySelector('.plan-days')?.value) || 1,
+    price: Number(row.querySelector('.plan-price')?.value) || 0,
+    maxMonitors: Number(row.querySelector('.plan-max-monitors')?.value) || 100,
+    active: Boolean(row.querySelector('.plan-active')?.checked),
+    features: String(row.querySelector('.plan-features')?.value || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  }));
+}
+
+els.btnAddPlan?.addEventListener('click', () => {
+  const plans = collectPlansAdminFromDom();
+  const n = plans.length + 1;
+  plans.push({
+    id: `plan-${Date.now()}`,
+    label: `Novo plano ${n}`,
+    days: 30,
+    price: 30,
+    maxMonitors: 100,
+    active: true,
+    features: ['Alertas por e-mail', 'Até 100 sites para monitoramento'],
+  });
+  renderPlansAdmin(plans);
+  const last = els.plansAdminList?.querySelector('.plan-admin-row:last-child .plan-label');
+  last?.focus();
+  last?.select();
+});
+
 function renderBillingUsers(users) {
   cachedBillingUsers = users || [];
   if (!els.billingUsersList) return;
@@ -1560,19 +1595,7 @@ els.reconcileForm?.addEventListener('submit', async (e) => {
 
 els.plansAdminForm?.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const rows = [...(els.plansAdminList?.querySelectorAll('.plan-admin-row') || [])];
-  const plans = rows.map((row) => ({
-    id: row.querySelector('.plan-id').value,
-    label: row.querySelector('.plan-label').value.trim(),
-    days: Number(row.querySelector('.plan-days').value) || 1,
-    price: Number(row.querySelector('.plan-price').value) || 0,
-    maxMonitors: Number(row.querySelector('.plan-max-monitors')?.value) || 100,
-    active: row.querySelector('.plan-active').checked,
-    features: String(row.querySelector('.plan-features')?.value || '')
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean),
-  }));
+  const plans = collectPlansAdminFromDom();
   try {
     await api('/admin/billing', { method: 'PUT', body: JSON.stringify({ plans }) });
     billingAdminFlash('Planos atualizados.');
