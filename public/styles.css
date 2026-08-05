@@ -1292,9 +1292,15 @@ dialog::backdrop {
 
 .users-list {
   display: grid;
-  gap: 0.65rem;
-  margin-top: 1rem;
-  max-width: 720px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+  max-width: none;
+  align-items: start;
+}
+
+.users-list > .empty {
+  grid-column: 1 / -1;
 }
 
 .user-card .user-head {
@@ -1316,15 +1322,20 @@ dialog::backdrop {
 .user-card-compact {
   padding: 0;
   overflow: hidden;
+  min-width: 0;
+}
+
+.user-card-compact.is-open {
+  grid-column: 1 / -1;
 }
 
 .user-card-toggle {
   width: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto;
-  gap: 0.65rem;
-  align-items: center;
-  padding: 0.75rem 0.9rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.35rem 0.5rem;
+  align-items: start;
+  padding: 0.55rem 0.65rem;
   border: 0;
   background: transparent;
   color: inherit;
@@ -1339,6 +1350,8 @@ dialog::backdrop {
 
 .user-card-main {
   min-width: 0;
+  display: grid;
+  gap: 0.12rem;
 }
 
 .user-card-main strong {
@@ -1346,16 +1359,24 @@ dialog::backdrop {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.88rem;
+  line-height: 1.25;
+}
+
+.user-card-main .meta {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.3;
 }
 
 .user-usage-summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem 0.75rem;
-  justify-content: flex-end;
+  gap: 0.2rem 0.55rem;
   align-items: center;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   color: var(--muted);
+  grid-column: 1 / -1;
 }
 
 .user-usage-summary strong {
@@ -1363,9 +1384,15 @@ dialog::backdrop {
   font-weight: 600;
 }
 
+.user-usage-summary .status {
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+}
+
 .user-card-compact .chevron {
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-top: 0.35rem;
   border-right: 2px solid var(--muted);
   border-bottom: 2px solid var(--muted);
   transform: rotate(-45deg);
@@ -1378,10 +1405,10 @@ dialog::backdrop {
 }
 
 .user-card-body {
-  padding: 0 0.9rem 0.85rem;
+  padding: 0 0.65rem 0.7rem;
   border-top: 1px solid var(--line);
   display: grid;
-  gap: 0.65rem;
+  gap: 0.55rem;
 }
 
 .user-card-body[hidden] {
@@ -1397,14 +1424,46 @@ dialog::backdrop {
   margin: 0.15rem 0;
 }
 
+.payment-card {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.55rem 0.65rem;
+  min-width: 0;
+}
+
+.payment-card strong {
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-card .meta {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 980px) {
+  .users-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 700px) {
-  .user-card-toggle {
-    grid-template-columns: 1fr auto;
+  .users-list {
+    grid-template-columns: 1fr;
   }
 
-  .user-usage-summary {
-    grid-column: 1 / -1;
-    justify-content: flex-start;
+  .user-card-compact.is-open {
+    grid-column: auto;
+  }
+
+  .user-card-toggle {
+    grid-template-columns: 1fr auto;
   }
 
   .billing-user-grid {

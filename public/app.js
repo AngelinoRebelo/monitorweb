@@ -612,16 +612,16 @@ function renderUsers(users) {
       <article class="card user-card user-card-compact${open ? ' is-open' : ''}" data-id="${escapeHtml(u.id)}">
         <button type="button" class="user-card-toggle" data-action="toggle-user-card" aria-expanded="${open}">
           <div class="user-card-main">
-            <strong>${escapeHtml(u.email)}</strong>
-            <p class="meta">${u.role === 'admin' ? 'Administrador' : 'Usuário'} · desde ${formatDate(u.createdAt)}</p>
+            <strong title="${escapeHtml(u.email)}">${escapeHtml(u.email)}</strong>
+            <p class="meta">${u.role === 'admin' ? 'Administrador' : 'Usuário'} · ${formatDate(u.createdAt)}</p>
             ${pending}
           </div>
+          <span class="chevron" aria-hidden="true"></span>
           <div class="user-usage-summary">
             <span>Sites <strong>${sitesUsed}/${sitesMax}</strong></span>
-            <span>E-mail hoje <strong>${mailUsed}/${mailMax}</strong></span>
-            <span class="status ${u.active ? 'ok' : 'error'}">${u.active ? 'ativa' : 'desativada'}</span>
+            <span>E-mail <strong>${mailUsed}/${mailMax}</strong></span>
+            <span class="status ${u.active ? 'ok' : 'error'}">${u.active ? 'ativa' : 'off'}</span>
           </div>
-          <span class="chevron" aria-hidden="true"></span>
         </button>
         <div class="user-card-body"${open ? '' : ' hidden'}>
           <div class="user-grid">
@@ -1377,17 +1377,22 @@ function renderBillingUsers(users) {
       <article class="card user-card user-card-compact${open ? ' is-open' : ''}" data-id="${escapeHtml(u.id)}">
         <button type="button" class="user-card-toggle" data-action="toggle-billing-card" aria-expanded="${open}">
           <div class="user-card-main">
-            <strong>${escapeHtml(u.email)}</strong>
-            <p class="meta">Status: <strong>${escapeHtml(b.status || '—')}</strong>
-              ${permanent ? ' · permanente' : b.expiresAt ? ` · até ${formatDate(b.expiresAt)}` : ''}
-            </p>
+            <strong title="${escapeHtml(u.email)}">${escapeHtml(u.email)}</strong>
+            <p class="meta">Status: <strong>${escapeHtml(b.status || '—')}</strong></p>
+            <p class="meta">${
+              permanent
+                ? '· permanente'
+                : b.expiresAt
+                  ? `· até ${formatDate(b.expiresAt)}`
+                  : '· —'
+            }</p>
           </div>
+          <span class="chevron" aria-hidden="true"></span>
           <div class="user-usage-summary">
             <span>Sites <strong>${sitesUsed}/${sitesMax}</strong></span>
             <span>Plano <strong>${escapeHtml(b.planId || (permanent ? 'permanente' : '—'))}</strong></span>
             <span class="status ${b.entitled ? 'ok' : 'error'}">${b.entitled ? 'liberado' : 'bloqueado'}</span>
           </div>
-          <span class="chevron" aria-hidden="true"></span>
         </button>
         <div class="user-card-body"${open ? '' : ' hidden'}>
           <div class="user-grid billing-user-grid">
@@ -1435,10 +1440,14 @@ function renderBillingPayments(payments) {
   els.billingPaymentsList.innerHTML = payments
     .map(
       (p) => `
-    <article class="card">
-      <strong>${escapeHtml(p.planId || 'plano')}</strong>
+    <article class="card payment-card">
+      <strong title="${escapeHtml(p.planId || 'plano')}">${escapeHtml(p.planId || 'plano')}</strong>
       <p class="meta">R$ ${Number(p.amount).toFixed(2)} · ${escapeHtml(p.status)} · ${formatDate(p.createdAt)}</p>
-      <p class="meta">user: ${escapeHtml(p.userId)} ${p.mpPaymentId ? `· MP ${escapeHtml(String(p.mpPaymentId))}` : ''}</p>
+      <p class="meta" title="user: ${escapeHtml(p.userId)}${
+        p.mpPaymentId ? ` · MP ${escapeHtml(String(p.mpPaymentId))}` : ''
+      }">user: ${escapeHtml(String(p.userId || '').slice(0, 8))}…${
+        p.mpPaymentId ? ` · MP ${escapeHtml(String(p.mpPaymentId))}` : ''
+      }</p>
     </article>`
     )
     .join('');
