@@ -1083,13 +1083,20 @@ function closePixDialog() {
 function openPixDialog(payload) {
   if (!els.pixDialog) return;
   const plan = payload.plan || {};
+  const amount = Number(plan.price || payload.payment?.amount || 0);
   if (els.pixTitle) els.pixTitle.textContent = 'Pagar com Pix';
   if (els.pixSummary) {
-    els.pixSummary.textContent = `${plan.label || 'Plano'} · R$ ${Number(plan.price || payload.payment?.amount || 0).toFixed(2)}`;
+    els.pixSummary.textContent = `R$ ${amount.toFixed(2).replace('.', ',')}`;
   }
   if (els.pixCopyCode) els.pixCopyCode.value = payload.qrCode || '';
-  if (els.pixStatus) els.pixStatus.textContent = 'Escaneie o QR ou copie o código no app do banco.';
-  if (els.pixWaiting) els.pixWaiting.textContent = 'Aguardando confirmação do pagamento…';
+  if (els.pixStatus) {
+    els.pixStatus.hidden = true;
+    els.pixStatus.textContent = '';
+  }
+  if (els.pixWaiting) {
+    els.pixWaiting.hidden = false;
+    els.pixWaiting.textContent = 'Aguardando confirmação do pagamento…';
+  }
 
   if (els.pixQrImg) {
     if (payload.qrCodeBase64) {
@@ -1113,12 +1120,16 @@ function openPixDialog(payload) {
       if (st.approved || st.activated || st.already) {
         stopPixPoll();
         if (els.pixWaiting) els.pixWaiting.textContent = 'Pagamento confirmado!';
-        if (els.pixStatus) els.pixStatus.textContent = 'Plano liberado. Você já pode ativar o e-mail.';
+        if (els.pixStatus) {
+          els.pixStatus.hidden = false;
+          els.pixStatus.textContent = 'Plano liberado.';
+        }
         await refreshSessionUi();
         await refreshBilling();
         setTimeout(() => closePixDialog(), 1200);
-      } else if (els.pixStatus) {
-        els.pixStatus.textContent = `Status: ${st.status || 'pending'}`;
+      } else if (els.pixStatus && st.status && st.status !== 'pending') {
+        els.pixStatus.hidden = false;
+        els.pixStatus.textContent = `Status: ${st.status}`;
       }
     } catch {
       /* keep polling */
