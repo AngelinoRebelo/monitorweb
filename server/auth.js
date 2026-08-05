@@ -812,6 +812,7 @@ adminRouter.get('/billing', async (_req, res) => {
     config: publicBillingConfig(cfg),
     raw: {
       trialDays: cfg.trialDays,
+      trialMaxMonitors: cfg.trialMaxMonitors,
       plans: cfg.plans,
       mercadoPago: {
         accessToken: cfg.mercadoPago.accessToken ? '••••' + cfg.mercadoPago.accessToken.slice(-6) : '',
