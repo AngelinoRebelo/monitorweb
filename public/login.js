@@ -39,10 +39,32 @@ async function api(path, options = {}) {
 }
 
 function hidePaywall() {
-  if (els.paywall) els.paywall.hidden = true;
+  if (els.paywall) {
+    els.paywall.hidden = true;
+    els.paywall.setAttribute('hidden', '');
+  }
   if (els.submit) {
     els.submit.hidden = false;
+    els.submit.removeAttribute('hidden');
     els.submit.disabled = false;
+  }
+}
+
+function showPaywall(message) {
+  if (els.paywallMsg) {
+    els.paywallMsg.textContent =
+      message ||
+      'Sua conta está bloqueada. É necessário pagar um plano para acessar novamente.';
+  }
+  if (els.paywall) {
+    els.paywall.hidden = false;
+    els.paywall.removeAttribute('hidden');
+  }
+  els.error.hidden = true;
+  els.ok.hidden = true;
+  if (els.submit) {
+    els.submit.hidden = true;
+    els.submit.setAttribute('hidden', '');
   }
 }
 
@@ -96,18 +118,6 @@ function showOk(message) {
   els.ok.hidden = false;
   els.error.hidden = true;
   hidePaywall();
-}
-
-function showPaywall(message) {
-  if (els.paywallMsg) {
-    els.paywallMsg.textContent =
-      message ||
-      'Sua conta está bloqueada. É necessário pagar um plano para acessar novamente.';
-  }
-  if (els.paywall) els.paywall.hidden = false;
-  els.error.hidden = true;
-  els.ok.hidden = true;
-  if (els.submit) els.submit.hidden = true;
 }
 
 els.tabs.forEach((tab) => {

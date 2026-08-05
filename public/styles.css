@@ -1517,6 +1517,10 @@ dialog::backdrop {
   background: rgba(212, 162, 76, 0.1);
 }
 
+.auth-paywall[hidden] {
+  display: none !important;
+}
+
 .auth-paywall .auth-error {
   color: var(--ink);
 }
