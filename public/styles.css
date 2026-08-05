@@ -241,10 +241,15 @@ body {
 }
 
 .notify-btn {
+  display: flex;
+  align-items: center;
   justify-content: flex-start;
   text-align: left;
   width: 100%;
   position: relative;
+  white-space: normal;
+  line-height: 1.25;
+  gap: 0.45rem;
 }
 
 .notify-btn.is-on {
@@ -271,11 +276,13 @@ body {
 }
 
 .notify-btn.is-locked::after {
-  content: 'bloqueado · assinar';
+  content: 'bloqueado';
+  flex: 0 0 auto;
   margin-left: auto;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   color: var(--muted);
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .plans-grid {

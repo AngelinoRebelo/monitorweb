@@ -16,7 +16,7 @@ const DEFAULT_PLANS = [
     price: 30,
     maxMonitors: 100,
     active: true,
-    features: ['Notificações por e-mail', 'Até 100 sites para monitoramento'],
+    features: ['Alertas por e-mail', 'Até 100 sites para monitoramento'],
   },
   {
     id: 'biweek',
@@ -25,7 +25,7 @@ const DEFAULT_PLANS = [
     price: 20,
     maxMonitors: 100,
     active: true,
-    features: ['Notificações por e-mail', 'Até 100 sites para monitoramento'],
+    features: ['Alertas por e-mail', 'Até 100 sites para monitoramento'],
   },
   {
     id: 'day',
@@ -34,7 +34,7 @@ const DEFAULT_PLANS = [
     price: 10,
     maxMonitors: 100,
     active: true,
-    features: ['Notificações por e-mail', 'Até 100 sites para monitoramento'],
+    features: ['Alertas por e-mail', 'Até 100 sites para monitoramento'],
   },
 ];
 
@@ -50,7 +50,7 @@ function normalizePlan(p = {}) {
     ? p.features.map((f) => String(f).trim()).filter(Boolean).slice(0, 8)
     : [];
   const defaults = [
-    'Notificações por e-mail',
+    'Alertas por e-mail',
     `Até ${maxMonitors} sites para monitoramento`,
   ];
   return {

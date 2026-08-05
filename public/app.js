@@ -72,7 +72,7 @@ const expandedAdminUserIds = new Set();
 const expandedBillingUserIds = new Set();
 
 const VIEW_TITLES = {
-  dashboard: 'Dashboard',
+  dashboard: 'Painel',
   monitors: 'Monitores',
   billing: 'Planos',
   admin: 'Admin',
@@ -294,7 +294,7 @@ function updateNotifyUi() {
     els.notifyStatus.textContent = `Permissão do navegador: ${map[perm] || perm}`;
   }
   els.btnNotify.textContent =
-    perm === 'granted' ? 'Notificações ativas' : 'Ativar notificações';
+    perm === 'granted' ? 'Alertas ativos' : 'Ativar alertas';
 }
 
 async function enableBrowserNotifications() {
@@ -1094,7 +1094,7 @@ function renderPlans(plans) {
       const maxSites = Number(p.maxMonitors) || 100;
       const features = Array.isArray(p.features) && p.features.length
         ? p.features
-        : ['Notificações por e-mail', `Até ${maxSites} sites para monitoramento`];
+        : ['Alertas por e-mail', `Até ${maxSites} sites para monitoramento`];
       return `
     <article class="plan-card${isActive ? ' is-active' : ''}" data-plan-id="${escapeHtml(p.id)}">
       ${isActive ? `<span class="plan-seal" title="Assinatura vigente">Ativo</span>` : ''}
