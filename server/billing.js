@@ -47,7 +47,14 @@ function normalizePlan(p = {}) {
     Math.min(1000, Number(p.maxMonitors) || PAID_DEFAULT_MAX_MONITORS)
   );
   const features = Array.isArray(p.features)
-    ? p.features.map((f) => String(f).trim()).filter(Boolean).slice(0, 8)
+    ? p.features
+        .map((f) =>
+          String(f)
+            .trim()
+            .replace(/^Notifica[^\s]*\s+por e-mail$/i, 'Alertas por e-mail')
+        )
+        .filter(Boolean)
+        .slice(0, 8)
     : [];
   const defaults = [
     'Alertas por e-mail',
