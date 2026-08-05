@@ -164,3 +164,86 @@ export async function sendChangeNotificationEmail({ to, monitorName, summary, ur
 
   return sendMail({ to, subject, html, text });
 }
+
+export async function sendPaymentReceiptEmail({
+  to,
+  planLabel,
+  planDays,
+  planPrice,
+  maxMonitors,
+  features,
+  expiresAt,
+  paymentId,
+  mpPaymentId,
+  paidAt,
+  appUrl,
+}) {
+  const subject = `MonitorWeb — comprovante de pagamento (${planLabel || 'plano'})`;
+  const paidLabel = paidAt ? new Date(paidAt).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR');
+  const expLabel = expiresAt ? new Date(expiresAt).toLocaleString('pt-BR') : 'conforme plano';
+  const priceLabel = `R$ ${Number(planPrice || 0).toFixed(2).replace('.', ',')}`;
+  const featureLines =
+    Array.isArray(features) && features.length
+      ? features
+      : ['Alertas por e-mail', `Até ${maxMonitors || 100} sites para monitoramento`];
+
+  const text = [
+    'Comprovante de pagamento — MonitorWeb',
+    '',
+    `Plano: ${planLabel || '—'}`,
+    `Valor: ${priceLabel}`,
+    `Duração: ${planDays || '—'} dia(s)`,
+    `Limite de sites: ${maxMonitors || 100}`,
+    `Pago em: ${paidLabel}`,
+    `Válido até: ${expLabel}`,
+    mpPaymentId ? `ID Mercado Pago: ${mpPaymentId}` : '',
+    paymentId ? `Referência: ${paymentId}` : '',
+    '',
+    'Itens inclusos:',
+    ...featureLines.map((f) => `- ${f}`),
+    '',
+    appUrl ? `Painel: ${appUrl}` : '',
+    '',
+    'Este é um comprovante automático do MonitorWeb (não substitui documento fiscal oficial do Mercado Pago).',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const rows = [
+    ['Plano', planLabel || '—'],
+    ['Valor pago', priceLabel],
+    ['Duração', `${planDays || '—'} dia(s)`],
+    ['Limite de sites', String(maxMonitors || 100)],
+    ['Data do pagamento', paidLabel],
+    ['Válido até', expLabel],
+    mpPaymentId ? ['ID Mercado Pago', String(mpPaymentId)] : null,
+    paymentId ? ['Referência interna', String(paymentId)] : null,
+  ].filter(Boolean);
+
+  const html = `
+  <div style="font-family:Arial,sans-serif;line-height:1.5;color:#123126;max-width:560px">
+    <h2 style="margin:0 0 8px">Comprovante de pagamento</h2>
+    <p style="margin:0 0 16px;color:#4a5c54">MonitorWeb — nota do plano adquirido</p>
+    <table style="width:100%;border-collapse:collapse;margin:0 0 16px">
+      ${rows
+        .map(
+          ([k, v]) => `
+        <tr>
+          <td style="padding:8px 10px;border:1px solid #d7e0db;background:#f7faf8;width:42%"><strong>${k}</strong></td>
+          <td style="padding:8px 10px;border:1px solid #d7e0db">${v}</td>
+        </tr>`
+        )
+        .join('')}
+    </table>
+    <p style="margin:0 0 8px"><strong>Itens inclusos</strong></p>
+    <ul style="margin:0 0 16px;padding-left:18px">
+      ${featureLines.map((f) => `<li>${f}</li>`).join('')}
+    </ul>
+    ${appUrl ? `<p><a href="${appUrl}">Abrir painel MonitorWeb</a></p>` : ''}
+    <p style="font-size:12px;color:#6b7a73;margin-top:18px">
+      Comprovante automático do MonitorWeb. O comprovante oficial do meio de pagamento permanece no Mercado Pago.
+    </p>
+  </div>`;
+
+  return sendMail({ to, subject, html, text });
+}

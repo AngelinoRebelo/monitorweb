@@ -1095,6 +1095,7 @@ function renderPlans(plans) {
       const features = Array.isArray(p.features) && p.features.length
         ? p.features
         : ['Alertas por e-mail', `Até ${maxSites} sites para monitoramento`];
+      const checkoutLocked = isActive;
       return `
     <article class="plan-card${isActive ? ' is-active' : ''}" data-plan-id="${escapeHtml(p.id)}">
       ${isActive ? `<span class="plan-seal" title="Assinatura vigente">Ativo</span>` : ''}
@@ -1105,11 +1106,13 @@ function renderPlans(plans) {
       </ul>
       <p class="hint">${
         isActive
-          ? `Assinatura vigente${billing.expiresAt ? ` até ${formatDate(billing.expiresAt)}` : ''}.`
+          ? `Assinatura vigente${billing.expiresAt ? ` até ${formatDate(billing.expiresAt)}` : ''}. Novo Pix só após o vencimento.`
           : 'Trial: até 5 sites. Planos pagos: até 100 sites.'
       }</p>
-      <button type="button" class="btn primary" data-action="checkout" data-plan-id="${escapeHtml(p.id)}">
-        ${isActive ? 'Estender com Pix' : 'Pagar com Pix'}
+      <button type="button" class="btn primary" data-action="checkout" data-plan-id="${escapeHtml(p.id)}"${
+        checkoutLocked ? ' disabled aria-disabled="true"' : ''
+      }>
+        ${checkoutLocked ? 'Plano ativo' : 'Pagar com Pix'}
       </button>
     </article>`;
     })
@@ -1208,13 +1211,24 @@ function openPixDialog(payload) {
 
 els.plansGrid?.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-action="checkout"]');
-  if (!btn) return;
+  if (!btn || btn.disabled) return;
+  const planId = btn.dataset.planId;
+  const billing = currentUser?.billing || {};
+  const activePlanId =
+    billing.entitled && (billing.status === 'active' || billing.source === 'paid')
+      ? billing.planId || currentUser?.billingPlanId || null
+      : null;
+  if (activePlanId && planId === activePlanId) {
+    billingFlash('Este plano já está ativo. Novo Pix só após o vencimento.', true);
+    return;
+  }
+  const prevLabel = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Gerando Pix…';
   try {
     const data = await api('/billing/checkout', {
       method: 'POST',
-      body: JSON.stringify({ planId: btn.dataset.planId }),
+      body: JSON.stringify({ planId }),
     });
     if (!data.qrCode && !data.qrCodeBase64) {
       billingFlash('Não foi possível gerar o QR Code Pix. Verifique o Mercado Pago.', true);
@@ -1224,8 +1238,9 @@ els.plansGrid?.addEventListener('click', async (e) => {
   } catch (err) {
     billingFlash(err.message, true);
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Pagar com Pix';
+    const stillActive = Boolean(activePlanId && planId === activePlanId);
+    btn.disabled = stillActive;
+    btn.textContent = stillActive ? 'Plano ativo' : prevLabel || 'Pagar com Pix';
   }
 });
 

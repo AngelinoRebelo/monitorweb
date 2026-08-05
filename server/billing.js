@@ -395,6 +395,22 @@ export async function createCheckoutForUser({ user, planId, req }) {
     throw new Error('Mercado Pago sem access token. Configure em Cobranças.');
   }
 
+  const state = getBillingState(user);
+  if (
+    state.entitled &&
+    state.source === 'paid' &&
+    state.planId === plan.id &&
+    state.expiresAt &&
+    Date.parse(state.expiresAt) > Date.now()
+  ) {
+    throw new Error(
+      'Este plano já está ativo. Novo Pix só fica disponível após o vencimento da assinatura.'
+    );
+  }
+  if (state.entitled && state.permanent && state.planId === plan.id) {
+    throw new Error('Este plano já está ativo de forma permanente.');
+  }
+
   const paymentId = randomUUID();
   const base = appBaseUrl(req);
   const amount = Number(plan.price);
@@ -554,16 +570,62 @@ export async function activatePayment({ paymentRecord, mpPayment, updateUser, fi
 
   const list = readPayments();
   const idx = list.findIndex((p) => p.id === paymentRecord.id);
+  const alreadyApproved = idx >= 0 && list[idx].status === 'approved';
+  const receiptAlreadySent = idx >= 0 && Boolean(list[idx].receiptSentAt);
   if (idx >= 0) {
     list[idx] = {
       ...list[idx],
       status: 'approved',
       mpPaymentId: mpPayment?.id != null ? String(mpPayment.id) : list[idx].mpPaymentId,
-      paidAt: new Date().toISOString(),
+      paidAt: list[idx].paidAt || new Date().toISOString(),
+      receiptSentAt: list[idx].receiptSentAt || null,
     };
     writePayments(list);
   }
+
+  // Envia comprovante na primeira confirmação (ou se a tentativa anterior falhou).
+  if (!receiptAlreadySent) {
+    void sendPaymentReceipt({
+      user: updated || current,
+      plan,
+      paymentRecord: idx >= 0 ? list[idx] : paymentRecord,
+      expiresAt,
+      mpPayment,
+    }).catch((err) => console.error('[billing] recibo', err?.message || err));
+  }
+
   return updated;
+}
+
+async function sendPaymentReceipt({ user, plan, paymentRecord, expiresAt, mpPayment }) {
+  const { isMailConfigured, sendPaymentReceiptEmail, appBaseUrl } = await import('./mail.js');
+  if (!isMailConfigured()) {
+    console.warn('[billing] recibo não enviado: e-mail não configurado');
+    return;
+  }
+  const email = user?.email;
+  if (!email) return;
+
+  await sendPaymentReceiptEmail({
+    to: email,
+    planLabel: plan?.label || paymentRecord.planId,
+    planDays: plan?.days || paymentRecord.days,
+    planPrice: plan?.price ?? paymentRecord.amount,
+    maxMonitors: plan?.maxMonitors || paymentRecord.maxMonitors || PAID_DEFAULT_MAX_MONITORS,
+    features: plan?.features,
+    expiresAt,
+    paymentId: paymentRecord.id,
+    mpPaymentId: mpPayment?.id != null ? String(mpPayment.id) : paymentRecord.mpPaymentId,
+    paidAt: paymentRecord.paidAt || new Date().toISOString(),
+    appUrl: `${appBaseUrl(null)}/#billing`,
+  });
+
+  const list = readPayments();
+  const idx = list.findIndex((p) => p.id === paymentRecord.id);
+  if (idx >= 0) {
+    list[idx] = { ...list[idx], receiptSentAt: new Date().toISOString() };
+    writePayments(list);
+  }
 }
 
 function findOrBuildPaymentRecord(mpPayment) {

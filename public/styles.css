@@ -697,6 +697,15 @@ input:focus {
   margin-top: 0.25rem;
 }
 
+.btn.primary:disabled,
+.btn.primary[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  background: rgba(212, 162, 76, 0.35);
+  color: rgba(26, 18, 6, 0.75);
+}
+
 .btn.ghost {
   background: rgba(255, 255, 255, 0.04);
 }
