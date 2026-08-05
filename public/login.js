@@ -38,6 +38,14 @@ async function api(path, options = {}) {
   return data;
 }
 
+function hidePaywall() {
+  if (els.paywall) els.paywall.hidden = true;
+  if (els.submit) {
+    els.submit.hidden = false;
+    els.submit.disabled = false;
+  }
+}
+
 function setMode(next) {
   if (next === 'register' && !registrationOpen) return;
   mode = next;
@@ -73,23 +81,21 @@ function setMode(next) {
   els.forgotHint.hidden = mode !== 'forgot';
   els.error.hidden = true;
   els.ok.hidden = true;
-  if (els.paywall) els.paywall.hidden = true;
-  if (els.submit) els.submit.hidden = false;
+  hidePaywall();
 }
 
 function showError(message) {
   els.error.textContent = message;
   els.error.hidden = false;
   els.ok.hidden = true;
-  if (els.paywall) els.paywall.hidden = true;
-  if (els.submit) els.submit.hidden = false;
+  hidePaywall();
 }
 
 function showOk(message) {
   els.ok.textContent = message;
   els.ok.hidden = false;
   els.error.hidden = true;
-  if (els.paywall) els.paywall.hidden = true;
+  hidePaywall();
 }
 
 function showPaywall(message) {
@@ -112,7 +118,7 @@ els.form.addEventListener('submit', async (e) => {
   e.preventDefault();
   els.error.hidden = true;
   els.ok.hidden = true;
-  if (els.paywall) els.paywall.hidden = true;
+  hidePaywall();
   els.submit.disabled = true;
   const email = $('#email').value.trim();
   const password = els.password.value;
@@ -131,18 +137,27 @@ els.form.addEventListener('submit', async (e) => {
     });
     window.location.href = '/';
   } catch (err) {
-    if (err.code === 'PAYMENT_REQUIRED' || err.status === 402) {
-      // Session cookie was set — button opens billing area.
+    if (mode === 'login' && (err.code === 'PAYMENT_REQUIRED' || err.status === 402)) {
+      // Só após tentativa de login com conta bloqueada.
       showPaywall(err.message);
       return;
     }
     showError(err.message);
   } finally {
-    els.submit.disabled = false;
+    if (els.submit && els.paywall?.hidden !== false) {
+      els.submit.disabled = false;
+    } else if (els.submit && els.paywall && !els.paywall.hidden) {
+      els.submit.disabled = false;
+      els.submit.hidden = true;
+    } else {
+      els.submit.disabled = false;
+    }
   }
 });
 
 (async () => {
+  // Ao atualizar a página, o aviso de pagamento nunca deve aparecer sozinho.
+  hidePaywall();
   try {
     if (new URLSearchParams(location.search).get('reset') === '1') {
       showOk('Senha atualizada. Entre com a nova senha.');
@@ -150,10 +165,13 @@ els.form.addEventListener('submit', async (e) => {
     const status = await api('/auth/status');
     if (status.authenticated) {
       if (status.user?.accessRestricted) {
-        window.location.href = '/#billing';
+        // Sessão residual de tentativa anterior: limpa e mantém login limpo.
+        await api('/auth/logout', { method: 'POST' }).catch(() => {});
+        hidePaywall();
+      } else {
+        window.location.href = '/';
         return;
       }
-      window.location.href = '/';
     }
     registrationOpen = Boolean(status.registrationOpen);
     if (els.tabRegister) {
@@ -161,6 +179,6 @@ els.form.addEventListener('submit', async (e) => {
       els.tabRegister.hidden = !registrationOpen;
     }
   } catch {
-    /* ignore */
+    hidePaywall();
   }
 })();
