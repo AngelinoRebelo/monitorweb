@@ -343,6 +343,45 @@ body {
   font-family: var(--sans, inherit);
 }
 
+.plan-features {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+  text-align: left;
+}
+
+.plan-features li {
+  position: relative;
+  padding-left: 1rem;
+  font-size: 0.86rem;
+  color: var(--ink);
+  opacity: 0.9;
+}
+
+.plan-features li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: #d4a24c;
+}
+
+.plan-admin-row {
+  display: grid;
+  grid-template-columns: 1.1fr 0.55fr 0.55fr 0.55fr auto;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.plan-features-field {
+  grid-column: 1 / -1;
+}
+
 .billing-admin-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -363,13 +402,6 @@ body {
 .plans-admin-list {
   display: grid;
   gap: 0.75rem;
-}
-
-.plan-admin-row {
-  display: grid;
-  grid-template-columns: 1.2fr 0.7fr 0.7fr auto;
-  gap: 0.5rem;
-  align-items: end;
 }
 
 @media (max-width: 900px) {

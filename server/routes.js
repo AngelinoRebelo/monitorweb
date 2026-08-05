@@ -108,8 +108,13 @@ router.post('/monitors', (req, res) => {
     return res.status(403).json({ error: 'Conta desativada' });
   }
   if (quota.remaining <= 0) {
+    const billing = req.user?.billing || {};
+    const tip =
+      billing.status === 'trial' || billing.source === 'trial'
+        ? ' No trial o limite é 5 sites — assine um plano para monitorar até 100.'
+        : ' Assine ou peça ao administrador para aumentar o limite.';
     return res.status(403).json({
-      error: `Limite de sites atingido (${quota.used}/${quota.maxMonitors}). Peça ao administrador para aumentar.`,
+      error: `Limite de sites atingido (${quota.used}/${quota.maxMonitors}).${tip}`,
     });
   }
   const monitor = createMonitor({

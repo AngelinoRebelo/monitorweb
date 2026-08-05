@@ -9,10 +9,60 @@ const CONFIG_FILE = path.join(DATA_DIR, 'billing-config.json');
 const PAYMENTS_FILE = path.join(DATA_DIR, 'billing-payments.json');
 
 const DEFAULT_PLANS = [
-  { id: 'month', label: '1 mês', days: 30, price: 30, active: true },
-  { id: 'biweek', label: '15 dias', days: 15, price: 20, active: true },
-  { id: 'day', label: '1 dia', days: 1, price: 10, active: true },
+  {
+    id: 'month',
+    label: '1 mês',
+    days: 30,
+    price: 30,
+    maxMonitors: 100,
+    active: true,
+    features: ['Notificações por e-mail', 'Até 100 sites para monitoramento'],
+  },
+  {
+    id: 'biweek',
+    label: '15 dias',
+    days: 15,
+    price: 20,
+    maxMonitors: 100,
+    active: true,
+    features: ['Notificações por e-mail', 'Até 100 sites para monitoramento'],
+  },
+  {
+    id: 'day',
+    label: '1 dia',
+    days: 1,
+    price: 10,
+    maxMonitors: 100,
+    active: true,
+    features: ['Notificações por e-mail', 'Até 100 sites para monitoramento'],
+  },
 ];
+
+export const TRIAL_MAX_MONITORS = 5;
+export const PAID_DEFAULT_MAX_MONITORS = 100;
+
+function normalizePlan(p = {}) {
+  const maxMonitors = Math.max(
+    1,
+    Math.min(1000, Number(p.maxMonitors) || PAID_DEFAULT_MAX_MONITORS)
+  );
+  const features = Array.isArray(p.features)
+    ? p.features.map((f) => String(f).trim()).filter(Boolean).slice(0, 8)
+    : [];
+  const defaults = [
+    'Notificações por e-mail',
+    `Até ${maxMonitors} sites para monitoramento`,
+  ];
+  return {
+    id: String(p.id || randomUUID()).slice(0, 40),
+    label: String(p.label || 'Plano').slice(0, 80),
+    days: Math.max(1, Number(p.days) || 1),
+    price: Math.max(0, Number(p.price) || 0),
+    maxMonitors,
+    active: p.active !== false,
+    features: features.length ? features : defaults,
+  };
+}
 
 function ensureDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -38,7 +88,8 @@ function writeJson(file, data) {
 function defaultConfig() {
   return {
     trialDays: 30,
-    plans: DEFAULT_PLANS.map((p) => ({ ...p })),
+    trialMaxMonitors: TRIAL_MAX_MONITORS,
+    plans: DEFAULT_PLANS.map((p) => normalizePlan(p)),
     mercadoPago: {
       accessToken: '',
       publicKey: '',
@@ -60,9 +111,16 @@ export function getBillingConfig() {
     enabled: Boolean(cfg.mercadoPago?.enabled),
   };
   if (!cfg.mercadoPago?.enabled && mp.accessToken) mp.enabled = true;
+  const plans = (Array.isArray(cfg.plans) && cfg.plans.length ? cfg.plans : DEFAULT_PLANS).map(
+    normalizePlan
+  );
   return {
     trialDays: Number(cfg.trialDays) > 0 ? Number(cfg.trialDays) : 30,
-    plans: Array.isArray(cfg.plans) && cfg.plans.length ? cfg.plans : DEFAULT_PLANS.map((p) => ({ ...p })),
+    trialMaxMonitors: Math.max(
+      1,
+      Math.min(1000, Number(cfg.trialMaxMonitors) || TRIAL_MAX_MONITORS)
+    ),
+    plans,
     mercadoPago: mp,
   };
 }
@@ -72,14 +130,12 @@ export function saveBillingConfig(patch = {}) {
   const next = {
     trialDays:
       patch.trialDays != null ? Math.max(0, Number(patch.trialDays) || 0) : current.trialDays,
+    trialMaxMonitors:
+      patch.trialMaxMonitors != null
+        ? Math.max(1, Math.min(1000, Number(patch.trialMaxMonitors) || TRIAL_MAX_MONITORS))
+        : current.trialMaxMonitors,
     plans: Array.isArray(patch.plans)
-      ? patch.plans.map((p) => ({
-          id: String(p.id || randomUUID()).slice(0, 40),
-          label: String(p.label || 'Plano').slice(0, 80),
-          days: Math.max(1, Number(p.days) || 1),
-          price: Math.max(0, Number(p.price) || 0),
-          active: p.active !== false,
-        }))
+      ? patch.plans.map((p) => normalizePlan(p))
       : current.plans,
     mercadoPago: {
       accessToken:
@@ -108,6 +164,7 @@ export function publicBillingConfig(cfg = getBillingConfig()) {
   const mp = cfg.mercadoPago || {};
   return {
     trialDays: cfg.trialDays,
+    trialMaxMonitors: cfg.trialMaxMonitors ?? TRIAL_MAX_MONITORS,
     plans: (cfg.plans || []).filter((p) => p.active !== false),
     allPlans: cfg.plans || [],
     mercadoPago: {
@@ -151,7 +208,31 @@ export function trialEndsAtFor(createdAt, trialDays = getBillingConfig().trialDa
   return addDaysIso(createdAt || new Date().toISOString(), trialDays);
 }
 
-/** Compute billing entitlement for a user record. */
+/** Effective site quota based on trial vs paid plan. */
+export function getEffectiveMonitorLimit(user) {
+  if (!user) return 0;
+  if (user.role === 'admin') {
+    return user.maxMonitors == null ? PAID_DEFAULT_MAX_MONITORS : Math.max(0, Number(user.maxMonitors));
+  }
+  const cfg = getBillingConfig();
+  const trialMax = cfg.trialMaxMonitors ?? TRIAL_MAX_MONITORS;
+  const state = getBillingState(user);
+  if (state.source === 'paid' || (state.status === 'active' && state.source !== 'trial')) {
+    const plan = (cfg.plans || []).find((p) => p.id === (state.planId || user.billingPlanId));
+    const fromPlan = plan?.maxMonitors || PAID_DEFAULT_MAX_MONITORS;
+    const stored = user.maxMonitors == null ? fromPlan : Number(user.maxMonitors);
+    return Math.max(fromPlan, stored, 0);
+  }
+  if (state.status === 'trial' || state.source === 'trial') {
+    return Math.min(Number(user.maxMonitors) || trialMax, trialMax);
+  }
+  // expired / inactive: keep paid quota if they had one, else trial cap
+  if (user.billingPlanId && user.maxMonitors != null) {
+    return Math.max(0, Number(user.maxMonitors));
+  }
+  return trialMax;
+}
+
 export function getBillingState(user) {
   if (!user) {
     return {
@@ -322,6 +403,7 @@ export async function createCheckoutForUser({ user, planId, req }) {
     planId: plan.id,
     amount,
     days: Number(plan.days),
+    maxMonitors: Number(plan.maxMonitors) || PAID_DEFAULT_MAX_MONITORS,
     status: mpPayment.status === 'approved' ? 'approved' : 'pending',
     mpPreferenceId: null,
     mpPaymentId: mpPayment.id != null ? String(mpPayment.id) : null,
@@ -344,7 +426,14 @@ export async function createCheckoutForUser({ user, planId, req }) {
       mpPaymentId: record.mpPaymentId,
       createdAt: record.createdAt,
     },
-    plan: { id: plan.id, label: plan.label, days: plan.days, price: plan.price },
+    plan: {
+      id: plan.id,
+      label: plan.label,
+      days: plan.days,
+      price: plan.price,
+      maxMonitors: plan.maxMonitors,
+      features: plan.features,
+    },
     mpPaymentId: record.mpPaymentId,
     status: mpPayment.status,
     qrCode: tx.qr_code || null,
@@ -426,11 +515,17 @@ export async function activatePayment({ paymentRecord, mpPayment, updateUser, fi
   const base = existingExpires > now ? existingExpires : now;
   const expiresAt = new Date(base + days * 24 * 60 * 60 * 1000).toISOString();
 
+  const cfg = getBillingConfig();
+  const plan = (cfg.plans || []).find((p) => p.id === paymentRecord.planId);
+  const planMax = plan?.maxMonitors || paymentRecord.maxMonitors || PAID_DEFAULT_MAX_MONITORS;
+  const nextMax = Math.max(Number(current?.maxMonitors) || 0, Number(planMax) || PAID_DEFAULT_MAX_MONITORS);
+
   const updated = updateUser(userId, {
     billingActive: true,
     billingPlanId: paymentRecord.planId,
     billingExpiresAt: expiresAt,
     emailNotifyAllowed: true,
+    maxMonitors: nextMax,
   });
 
   const list = readPayments();

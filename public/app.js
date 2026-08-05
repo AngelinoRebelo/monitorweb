@@ -1042,15 +1042,22 @@ function renderPlans(plans) {
   els.plansGrid.innerHTML = cachedPlans
     .map((p) => {
       const isActive = Boolean(activePlanId && p.id === activePlanId);
+      const maxSites = Number(p.maxMonitors) || 100;
+      const features = Array.isArray(p.features) && p.features.length
+        ? p.features
+        : ['Notificações por e-mail', `Até ${maxSites} sites para monitoramento`];
       return `
     <article class="plan-card${isActive ? ' is-active' : ''}" data-plan-id="${escapeHtml(p.id)}">
       ${isActive ? `<span class="plan-seal" title="Assinatura vigente">Ativo</span>` : ''}
       <h3>${escapeHtml(p.label)}</h3>
       <p class="plan-price">R$ ${Number(p.price).toFixed(0)} <span>/ ${Number(p.days)} dia(s)</span></p>
+      <ul class="plan-features">
+        ${features.map((f) => `<li>${escapeHtml(f)}</li>`).join('')}
+      </ul>
       <p class="hint">${
         isActive
           ? `Assinatura vigente${billing.expiresAt ? ` até ${formatDate(billing.expiresAt)}` : ''}.`
-          : 'Libera notificações por e-mail durante o período.'
+          : 'Trial: até 5 sites. Planos pagos: até 100 sites.'
       }</p>
       <button type="button" class="btn primary" data-action="checkout" data-plan-id="${escapeHtml(p.id)}">
         ${isActive ? 'Estender com Pix' : 'Pagar com Pix'}
@@ -1194,9 +1201,9 @@ function renderPlansAdmin(plans) {
   const list = plans?.length
     ? plans
     : [
-        { id: 'month', label: '1 mês', days: 30, price: 30, active: true },
-        { id: 'biweek', label: '15 dias', days: 15, price: 20, active: true },
-        { id: 'day', label: '1 dia', days: 1, price: 10, active: true },
+        { id: 'month', label: '1 mês', days: 30, price: 30, maxMonitors: 100, active: true },
+        { id: 'biweek', label: '15 dias', days: 15, price: 20, maxMonitors: 100, active: true },
+        { id: 'day', label: '1 dia', days: 1, price: 10, maxMonitors: 100, active: true },
       ];
   els.plansAdminList.innerHTML = list
     .map(
@@ -1205,7 +1212,13 @@ function renderPlansAdmin(plans) {
       <label>Nome<input type="text" class="plan-label" value="${escapeHtml(p.label || '')}" /></label>
       <label>Dias<input type="number" min="1" class="plan-days" value="${Number(p.days) || 1}" /></label>
       <label>R$<input type="number" min="0" step="0.01" class="plan-price" value="${Number(p.price) || 0}" /></label>
+      <label>Sites<input type="number" min="1" max="1000" class="plan-max-monitors" value="${Number(p.maxMonitors) || 100}" /></label>
       <label class="check"><input type="checkbox" class="plan-active" ${p.active !== false ? 'checked' : ''} /> Ativo</label>
+      <label class="plan-features-field">Detalhes (1 por linha)
+        <textarea class="plan-features" rows="2">${escapeHtml(
+          (Array.isArray(p.features) ? p.features : []).join('\n')
+        )}</textarea>
+      </label>
       <input type="hidden" class="plan-id" value="${escapeHtml(p.id || `plan-${i}`)}" />
     </div>`
     )
@@ -1386,7 +1399,12 @@ els.plansAdminForm?.addEventListener('submit', async (e) => {
     label: row.querySelector('.plan-label').value.trim(),
     days: Number(row.querySelector('.plan-days').value) || 1,
     price: Number(row.querySelector('.plan-price').value) || 0,
+    maxMonitors: Number(row.querySelector('.plan-max-monitors')?.value) || 100,
     active: row.querySelector('.plan-active').checked,
+    features: String(row.querySelector('.plan-features')?.value || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean),
   }));
   try {
     await api('/admin/billing', { method: 'PUT', body: JSON.stringify({ plans }) });

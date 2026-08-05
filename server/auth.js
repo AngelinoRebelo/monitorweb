@@ -17,7 +17,7 @@ import {
   mailProvider,
   sendPasswordResetEmail,
 } from './mail.js';
-import { getBillingState } from './billing.js';
+import { getBillingState, getEffectiveMonitorLimit, TRIAL_MAX_MONITORS } from './billing.js';
 
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const COOKIE_NAME = 'mw_session';
@@ -377,12 +377,13 @@ export function getUserQuota(userId) {
   const user = findUserById(userId);
   if (!user) return { maxMonitors: 0, used: 0, remaining: 0, active: false };
   const used = countMonitorsByUser(userId);
-  const maxMonitors = user.maxMonitors ?? DEFAULT_MAX_MONITORS;
+  const maxMonitors = getEffectiveMonitorLimit(user);
   return {
     maxMonitors,
     used,
     remaining: Math.max(0, maxMonitors - used),
     active: user.active !== false,
+    trialMaxMonitors: TRIAL_MAX_MONITORS,
   };
 }
 
@@ -487,7 +488,7 @@ authRouter.post('/register', (req, res) => {
       passwordHash: hashPassword(password),
       role: isFirst ? 'admin' : 'user',
       active: true,
-      maxMonitors: DEFAULT_MAX_MONITORS,
+      maxMonitors: isFirst ? DEFAULT_MAX_MONITORS : TRIAL_MAX_MONITORS,
       createdAt,
       billingActive: true,
       billingTrialEndsAt: trialEndsAt,
