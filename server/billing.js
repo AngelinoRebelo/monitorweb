@@ -296,9 +296,19 @@ export function hasPaidEmailPlan(user) {
   );
 }
 
-/** E-mail alerts: paid plan, or admin explicitly liberated the option. */
+/** Full app access (monitors, dashboard). Admins always; others need active entitlement. */
+export function hasAppAccess(user) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (user.active === false) return false;
+  return getBillingState(user).entitled === true;
+}
+
+/** E-mail alerts: needs entitlement, then paid plan or admin grant. */
 export function canUseEmailAlerts(user) {
   if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (!getBillingState(user).entitled) return false;
   if (hasPaidEmailPlan(user)) return true;
   return user.emailNotifyAllowed === true;
 }

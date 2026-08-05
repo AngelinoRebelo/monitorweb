@@ -17,6 +17,17 @@ async function executeCheck(id, reason = 'schedule') {
     const monitor = getMonitor(id);
     if (!monitor || !monitor.enabled) return;
 
+    if (monitor.userId) {
+      try {
+        const { findUserByIdPublic } = await import('./auth.js');
+        const { hasAppAccess } = await import('./billing.js');
+        const owner = findUserByIdPublic(monitor.userId);
+        if (!hasAppAccess(owner)) return;
+      } catch {
+        /* if auth unavailable, continue */
+      }
+    }
+
     notifyStatus(`Verificando: ${monitor.name}`, {
       monitorId: id,
       reason,

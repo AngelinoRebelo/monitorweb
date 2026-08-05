@@ -248,6 +248,32 @@ export async function sendPaymentReceiptEmail({
   return sendMail({ to, subject, html, text });
 }
 
+export async function sendAccountBlockedEmail({ to, appUrl }) {
+  const subject = 'MonitorWeb — conta bloqueada; renove seu plano';
+  const text = [
+    'Sua conta no MonitorWeb foi bloqueada porque o período do plano (e o trial de cortesia) terminou sem renovação.',
+    '',
+    'Faça login e escolha um plano para recuperar o acesso aos monitores.',
+    appUrl ? `Pagamentos: ${appUrl}/#billing` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const html = `
+  <div style="font-family:Arial,sans-serif;line-height:1.5;color:#123126;max-width:560px">
+    <h2 style="margin:0 0 12px">Conta bloqueada</h2>
+    <p>O período do seu plano e o trial de cortesia terminaram sem renovação.</p>
+    <p>Faça login e escolha um plano para recuperar o acesso.</p>
+    ${
+      appUrl
+        ? `<p style="margin:24px 0"><a href="${appUrl}/login.html" style="background:#d4a24c;color:#1a1408;padding:12px 18px;border-radius:999px;text-decoration:none;font-weight:700;display:inline-block">Entrar e pagar</a></p>`
+        : ''
+    }
+  </div>`;
+
+  return sendMail({ to, subject, html, text });
+}
+
 function fmtBr(iso) {
   if (!iso) return '—';
   try {

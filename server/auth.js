@@ -25,6 +25,7 @@ import {
   getEffectiveMonitorLimit,
   getTrialDefaults,
   canUseEmailAlerts,
+  hasAppAccess,
   TRIAL_MAX_MONITORS,
 } from './billing.js';
 
@@ -229,6 +230,7 @@ function publicUser(user) {
     user.emailNotifySentDate === todayKey() ? Number(user.emailNotifySentCount) || 0 : 0;
   const billing = getBillingState(user);
   const emailOk = canUseEmailAlerts(user);
+  const accessOk = hasAppAccess(user);
   return {
     id: user.id,
     email: user.email,
@@ -248,6 +250,7 @@ function publicUser(user) {
     billingTrialEndsAt: user.billingTrialEndsAt || null,
     billingPermanent: user.billingPermanent === true,
     billing,
+    accessRestricted: !accessOk,
     resetPending: Boolean(user.resetTokenHash && user.resetExpires && Date.parse(user.resetExpires) > Date.now()),
     resetRequestedAt: user.resetRequestedAt || null,
   };
@@ -385,6 +388,21 @@ export function requireAuth(req, res, next) {
   if (req.path === '/health') return next();
   if (req.path.startsWith('/auth')) return next();
   return res.status(401).json({ error: 'Não autenticado', code: 'UNAUTHORIZED' });
+}
+
+/** Full product access — blocked/expired users may only use billing + auth. */
+export function requireAppAccess(req, res, next) {
+  if (req.path === '/health' || req.path.startsWith('/health')) return next();
+  if (!req.user) return res.status(401).json({ error: 'Não autenticado', code: 'UNAUTHORIZED' });
+  if (req.user.role === 'admin') return next();
+  if (req.user.accessRestricted) {
+    return res.status(402).json({
+      error: 'Conta bloqueada. Escolha um plano para recuperar o acesso.',
+      code: 'PAYMENT_REQUIRED',
+      accessRestricted: true,
+    });
+  }
+  return next();
 }
 
 export function requireAdmin(req, res, next) {
@@ -584,7 +602,17 @@ authRouter.post('/login', (req, res) => {
     return res.status(403).json({ error: 'Conta desativada. Contate o administrador.' });
   }
   setSessionCookie(res, user.id);
-  res.json({ user: publicUser(user) });
+  const pub = publicUser(user);
+  if (pub.accessRestricted) {
+    return res.status(402).json({
+      error:
+        'Sua conta está bloqueada por falta de plano ativo. Efetue o pagamento para recuperar o acesso.',
+      code: 'PAYMENT_REQUIRED',
+      accessRestricted: true,
+      user: pub,
+    });
+  }
+  res.json({ user: pub });
 });
 
 authRouter.post('/logout', (_req, res) => {

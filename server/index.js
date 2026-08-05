@@ -7,6 +7,7 @@ import { DATA_DIR, claimOrphanData } from './db.js';
 import {
   attachUser,
   requireAuth,
+  requireAppAccess,
   requirePageAuth,
   authRouter,
   adminRouter,
@@ -47,7 +48,7 @@ app.use('/api/billlng', billingWebhookRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/admin', requireAuth, adminRouter);
 app.use('/api/billing', requireAuth, billingRouter);
-app.use('/api', requireAuth, routes);
+app.use('/api', requireAuth, requireAppAccess, routes);
 
 app.use((req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();

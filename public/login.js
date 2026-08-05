@@ -7,6 +7,9 @@ const els = {
   submit: $('#auth-submit'),
   error: $('#auth-error'),
   ok: $('#auth-ok'),
+  paywall: $('#auth-paywall'),
+  paywallMsg: $('#auth-paywall-msg'),
+  paywallBtn: $('#auth-paywall-btn'),
   password: $('#password'),
   passwordField: $('#password-field'),
   tabRegister: $('#tab-register'),
@@ -25,7 +28,13 @@ async function api(path, options = {}) {
     ...options,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Erro ${res.status}`);
+  if (!res.ok) {
+    const err = new Error(data.error || `Erro ${res.status}`);
+    err.status = res.status;
+    err.code = data.code;
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 
@@ -64,18 +73,35 @@ function setMode(next) {
   els.forgotHint.hidden = mode !== 'forgot';
   els.error.hidden = true;
   els.ok.hidden = true;
+  if (els.paywall) els.paywall.hidden = true;
+  if (els.submit) els.submit.hidden = false;
 }
 
 function showError(message) {
   els.error.textContent = message;
   els.error.hidden = false;
   els.ok.hidden = true;
+  if (els.paywall) els.paywall.hidden = true;
+  if (els.submit) els.submit.hidden = false;
 }
 
 function showOk(message) {
   els.ok.textContent = message;
   els.ok.hidden = false;
   els.error.hidden = true;
+  if (els.paywall) els.paywall.hidden = true;
+}
+
+function showPaywall(message) {
+  if (els.paywallMsg) {
+    els.paywallMsg.textContent =
+      message ||
+      'Sua conta está bloqueada. É necessário pagar um plano para acessar novamente.';
+  }
+  if (els.paywall) els.paywall.hidden = false;
+  els.error.hidden = true;
+  els.ok.hidden = true;
+  if (els.submit) els.submit.hidden = true;
 }
 
 els.tabs.forEach((tab) => {
@@ -86,6 +112,7 @@ els.form.addEventListener('submit', async (e) => {
   e.preventDefault();
   els.error.hidden = true;
   els.ok.hidden = true;
+  if (els.paywall) els.paywall.hidden = true;
   els.submit.disabled = true;
   const email = $('#email').value.trim();
   const password = els.password.value;
@@ -104,6 +131,11 @@ els.form.addEventListener('submit', async (e) => {
     });
     window.location.href = '/';
   } catch (err) {
+    if (err.code === 'PAYMENT_REQUIRED' || err.status === 402) {
+      // Session cookie was set — button opens billing area.
+      showPaywall(err.message);
+      return;
+    }
     showError(err.message);
   } finally {
     els.submit.disabled = false;
@@ -117,14 +149,18 @@ els.form.addEventListener('submit', async (e) => {
     }
     const status = await api('/auth/status');
     if (status.authenticated) {
+      if (status.user?.accessRestricted) {
+        window.location.href = '/#billing';
+        return;
+      }
       window.location.href = '/';
-      return;
     }
     registrationOpen = Boolean(status.registrationOpen);
-    els.tabRegister.disabled = !registrationOpen;
-    els.tabRegister.hidden = !registrationOpen;
-    if (registrationOpen && !status.hasUsers) setMode('register');
-  } catch (err) {
-    showError(err.message);
+    if (els.tabRegister) {
+      els.tabRegister.disabled = !registrationOpen;
+      els.tabRegister.hidden = !registrationOpen;
+    }
+  } catch {
+    /* ignore */
   }
 })();

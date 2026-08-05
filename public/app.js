@@ -98,8 +98,24 @@ async function api(path, options = {}) {
     throw new Error('Não autenticado');
   }
   const data = await res.json().catch(() => ({}));
+  if (res.status === 402 && data.code === 'PAYMENT_REQUIRED') {
+    if (currentUser) currentUser = { ...currentUser, accessRestricted: true };
+    enforceAccessGate();
+    const err = new Error(data.error || 'Pagamento necessário');
+    err.code = 'PAYMENT_REQUIRED';
+    throw err;
+  }
   if (!res.ok) throw new Error(data.error || `Erro ${res.status}`);
   return data;
+}
+
+function enforceAccessGate() {
+  if (!currentUser?.accessRestricted || currentUser?.role === 'admin') {
+    document.body.classList.remove('access-restricted');
+    return;
+  }
+  document.body.classList.add('access-restricted');
+  if (currentView !== 'billing') setView('billing');
 }
 
 function formatDate(iso) {
@@ -162,6 +178,9 @@ function changesLabel(count) {
 }
 
 function setView(view) {
+  if (currentUser?.accessRestricted && currentUser?.role !== 'admin' && view !== 'billing') {
+    view = 'billing';
+  }
   if ((view === 'admin' || view === 'billing-admin') && currentUser?.role !== 'admin') {
     view = 'dashboard';
   }
@@ -276,6 +295,7 @@ function applyAccountUser(user) {
   if (currentUser?.id === user.id) {
     currentUser = { ...currentUser, ...user };
     syncEmailNotifyUi(currentUser);
+    enforceAccessGate();
     if (els.quotaHint && user.maxMonitors != null && user.monitorCount != null) {
       syncQuotaUi({ used: user.monitorCount, maxMonitors: user.maxMonitors });
     }
@@ -292,6 +312,11 @@ async function refreshSessionUi() {
     const me = await api('/auth/me');
     currentUser = me.user;
     syncEmailNotifyUi(currentUser);
+    if (me.user?.accessRestricted && me.user?.role !== 'admin') {
+      enforceAccessGate();
+      return;
+    }
+    document.body.classList.remove('access-restricted');
     syncQuotaUi(me.quota);
   } catch {
     /* ignore */
@@ -1733,6 +1758,18 @@ updateNotifyUi();
     if (els.quotaHint && me.quota) {
       els.quotaHint.hidden = false;
       els.quotaHint.textContent = `Sites: ${me.quota.used} de ${me.quota.maxMonitors} disponíveis.`;
+    }
+    if (me.user?.accessRestricted && me.user?.role !== 'admin') {
+      enforceAccessGate();
+      await refreshBilling().catch(console.error);
+      setView('billing');
+      if (els.billingFlash) {
+        els.billingFlash.hidden = false;
+        els.billingFlash.textContent =
+          'Conta bloqueada. Escolha um plano e pague com Pix para recuperar o acesso.';
+        els.billingFlash.classList.add('warn-text');
+      }
+      return;
     }
     connectSse();
     await refresh();

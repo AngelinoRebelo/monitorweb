@@ -86,6 +86,46 @@ export async function applyPostPaidGraceIfNeeded(user, { updateUser, notifyAccou
   return updated;
 }
 
+/** After grace trial ends without renewal, lock billing access. */
+export async function applyBlockAfterGraceIfNeeded(user, { updateUser, notifyAccount }) {
+  if (!user || user.role === 'admin' || user.billingPermanent === true) return null;
+  if (user.billingActive === false) return null;
+  if (!user.billingGraceForExpiresAt) return null;
+
+  const state = getBillingState(user);
+  if (state.entitled) return null;
+
+  const updated = updateUser(user.id, {
+    billingActive: false,
+    emailNotifyAllowed: false,
+    emailNotifyStatus: 'off',
+  });
+  if (!updated) return null;
+
+  if (notifyAccount) {
+    try {
+      notifyAccount(updated);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (isMailConfigured() && user.email) {
+    try {
+      const { sendAccountBlockedEmail } = await import('./mail.js');
+      await sendAccountBlockedEmail({
+        to: user.email,
+        appUrl: appBaseUrl(null),
+      });
+    } catch (err) {
+      console.error('[billing-lifecycle] block email', err?.message || err);
+    }
+  }
+
+  console.log(`[billing-lifecycle] blocked after grace → ${user.email}`);
+  return updated;
+}
+
 async function maybeSendExpiryWarning(user, { updateUser }) {
   if (!user || user.role === 'admin' || user.billingPermanent === true) return;
   if (user.billingActive === false) return;
@@ -135,6 +175,9 @@ export async function runBillingLifecycle() {
     try {
       await maybeSendExpiryWarning(user, { updateUser });
       await applyPostPaidGraceIfNeeded(user, { updateUser, notifyAccount });
+      // Re-read after possible grace apply
+      const fresh = auth.findUserByIdPublic(user.id) || user;
+      await applyBlockAfterGraceIfNeeded(fresh, { updateUser, notifyAccount });
     } catch (err) {
       console.error('[billing-lifecycle] user', user?.email, err?.message || err);
     }

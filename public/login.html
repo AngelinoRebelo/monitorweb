@@ -60,8 +60,14 @@
               placeholder="mínimo 8 caracteres"
             />
           </label>
-          <p id="auth-error" class="auth-error" hidden></p>
+  <p id="auth-error" class="auth-error" hidden></p>
           <p id="auth-ok" class="hint" hidden></p>
+          <div id="auth-paywall" class="auth-paywall" hidden>
+            <p id="auth-paywall-msg" class="auth-error">
+              Sua conta está bloqueada. É necessário pagar um plano para acessar novamente.
+            </p>
+            <a id="auth-paywall-btn" class="btn primary" href="/#billing">Ir para pagamento</a>
+          </div>
           <button type="submit" class="btn primary" id="auth-submit">Entrar</button>
         </form>
 

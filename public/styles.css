@@ -1507,6 +1507,38 @@ dialog::backdrop {
   font-size: 0.9rem;
 }
 
+.auth-paywall {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.15rem 0;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid rgba(212, 162, 76, 0.45);
+  border-radius: 12px;
+  background: rgba(212, 162, 76, 0.1);
+}
+
+.auth-paywall .auth-error {
+  color: var(--ink);
+}
+
+.auth-paywall .btn.primary {
+  justify-self: stretch;
+  text-align: center;
+  text-decoration: none;
+}
+
+body.access-restricted .side-link:not([data-view='billing']) {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+body.access-restricted #view-dashboard,
+body.access-restricted #view-monitors,
+body.access-restricted #view-admin,
+body.access-restricted #view-billing-admin {
+  display: none !important;
+}
+
 .auth-card form {
   display: grid;
   gap: 0.85rem;
