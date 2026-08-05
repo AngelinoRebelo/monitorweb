@@ -260,6 +260,7 @@ function applyAccountUser(user) {
     if (els.quotaHint && user.maxMonitors != null && user.monitorCount != null) {
       syncQuotaUi({ used: user.monitorCount, maxMonitors: user.maxMonitors });
     }
+    if (currentView === 'billing') renderPlans(cachedPlans);
   }
 
   if (currentView === 'admin' && currentUser?.role === 'admin') {
@@ -1032,18 +1033,30 @@ function renderPlans(plans) {
     els.plansGrid.innerHTML = `<p class="empty">Nenhum plano disponível no momento.</p>`;
     return;
   }
+  const billing = currentUser?.billing || {};
+  const activePlanId =
+    billing.entitled && (billing.status === 'active' || billing.source === 'paid')
+      ? billing.planId || currentUser?.billingPlanId || null
+      : null;
+
   els.plansGrid.innerHTML = cachedPlans
-    .map(
-      (p) => `
-    <article class="plan-card" data-plan-id="${escapeHtml(p.id)}">
+    .map((p) => {
+      const isActive = Boolean(activePlanId && p.id === activePlanId);
+      return `
+    <article class="plan-card${isActive ? ' is-active' : ''}" data-plan-id="${escapeHtml(p.id)}">
+      ${isActive ? `<span class="plan-seal" title="Assinatura vigente">Ativo</span>` : ''}
       <h3>${escapeHtml(p.label)}</h3>
       <p class="plan-price">R$ ${Number(p.price).toFixed(0)} <span>/ ${Number(p.days)} dia(s)</span></p>
-      <p class="hint">Libera notificações por e-mail durante o período.</p>
+      <p class="hint">${
+        isActive
+          ? `Assinatura vigente${billing.expiresAt ? ` até ${formatDate(billing.expiresAt)}` : ''}.`
+          : 'Libera notificações por e-mail durante o período.'
+      }</p>
       <button type="button" class="btn primary" data-action="checkout" data-plan-id="${escapeHtml(p.id)}">
-        Pagar com Pix
+        ${isActive ? 'Estender com Pix' : 'Pagar com Pix'}
       </button>
-    </article>`
-    )
+    </article>`;
+    })
     .join('');
 }
 

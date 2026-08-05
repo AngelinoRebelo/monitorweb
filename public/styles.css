@@ -286,6 +286,7 @@ body {
 }
 
 .plan-card {
+  position: relative;
   display: grid;
   gap: 0.55rem;
   padding: 1.1rem 1rem;
@@ -294,10 +295,38 @@ body {
   background: rgba(0, 0, 0, 0.18);
 }
 
+.plan-card.is-active {
+  border-color: rgba(212, 162, 76, 0.7);
+  box-shadow: 0 0 0 1px rgba(212, 162, 76, 0.28), 0 10px 28px rgba(0, 0, 0, 0.22);
+  background:
+    linear-gradient(160deg, rgba(212, 162, 76, 0.12), transparent 55%),
+    rgba(0, 0, 0, 0.22);
+}
+
+.plan-seal {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.4rem;
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(212, 162, 76, 0.55);
+  background: rgba(212, 162, 76, 0.92);
+  color: #1a1206;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .plan-card h3 {
   margin: 0;
   font-family: var(--display);
   font-size: 1.25rem;
+  padding-right: 4rem;
 }
 
 .plan-price {
