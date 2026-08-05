@@ -279,6 +279,17 @@ export function getTrialDefaults() {
   };
 }
 
+/** E-mail change alerts require a paid/permanent plan (not trial). */
+export function canUseEmailAlerts(user) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  const state = getBillingState(user);
+  return (
+    state.entitled === true &&
+    (state.source === 'paid' || state.source === 'permanent' || state.source === 'admin')
+  );
+}
+
 export function getBillingState(user) {
   if (!user) {
     return {
@@ -380,15 +391,11 @@ export function applyBillingFields(user) {
   };
 }
 
-/** When entitled, unlock email option; when not, lock it (unless admin forced allow while entitled before). */
+/** Unlock e-mail option only for paid/permanent plans (not trial). */
 export function syncEmailAccessFromBilling(user) {
-  const state = getBillingState(user);
-  if (state.entitled) {
+  if (canUseEmailAlerts(user)) {
     return {
       emailNotifyAllowed: true,
-      ...(user.emailNotifyStatus === 'off' || !user.emailNotifyStatus
-        ? {}
-        : {}),
     };
   }
   return {

@@ -30,6 +30,9 @@ const els = {
   pixCopyCode: $('#pix-copy-code'),
   pixCopyBtn: $('#pix-copy-btn'),
   pixStatus: $('#pix-status'),
+  emailPlansDialog: $('#email-plans-dialog'),
+  emailPlansClose: $('#email-plans-close'),
+  emailPlansGo: $('#email-plans-go'),
   mpConfigForm: $('#mp-config-form'),
   mpAccessToken: $('#mp-access-token'),
   mpPublicKey: $('#mp-public-key'),
@@ -191,20 +194,30 @@ function emailNotifyLabel(status) {
   );
 }
 
+function hasPaidEmailAccess(user = currentUser) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  const billing = user.billing || {};
+  return (
+    billing.entitled === true &&
+    (billing.source === 'paid' || billing.source === 'permanent' || billing.source === 'admin')
+  );
+}
+
 function syncEmailNotifyUi(user) {
   if (!els.emailNotifyBox) return;
   els.emailNotifyBox.hidden = false;
   const billing = user?.billing || {};
-  const entitled = billing.entitled === true;
+  const emailOk = hasPaidEmailAccess(user);
   const status = user?.emailNotifyStatus || 'off';
   const dailyLimit = user?.emailNotifyDailyLimit ?? 10;
   const sentToday = user?.emailNotifySentToday ?? 0;
-  const emailOn = entitled && status === 'approved';
+  const emailOn = emailOk && status === 'approved';
 
   if (els.btnEmailNotify) {
-    els.btnEmailNotify.classList.toggle('is-locked', !entitled);
+    els.btnEmailNotify.classList.toggle('is-locked', !emailOk);
     els.btnEmailNotify.classList.toggle('is-on', emailOn);
-    els.btnEmailNotify.classList.toggle('is-off', entitled && !emailOn);
+    els.btnEmailNotify.classList.toggle('is-off', emailOk && !emailOn);
   }
 
   if (els.btnBrowserNotify) {
@@ -217,19 +230,16 @@ function syncEmailNotifyUi(user) {
   }
 
   if (els.emailNotifyStatus) {
-    if (!entitled) {
-      const until = billing.expiresAt ? formatDate(billing.expiresAt) : null;
-      els.emailNotifyStatus.textContent = until
-        ? `Plano expirado em ${until}. Clique no botão para assinar e liberar o e-mail.`
-        : 'Clique no botão bloqueado para ver os planos e liberar alertas por e-mail.';
+    if (!emailOk) {
+      els.emailNotifyStatus.textContent =
+        billing.status === 'trial'
+          ? `Trial ativo até ${formatDate(billing.expiresAt)}. E-mail só em planos pagos — clique para ver os planos.`
+          : 'Somente planos pagos enviam alertas por e-mail. Clique para escolher um plano.';
       els.emailNotifyStatus.classList.add('warn-text');
-    } else if (billing.status === 'trial') {
-      els.emailNotifyStatus.textContent = `Trial ativo até ${formatDate(billing.expiresAt)} · Limite hoje: ${sentToday}/${dailyLimit}${
-        emailOn ? ' · e-mail ligado' : ' · clique para ativar e-mail'
-      }`;
-      els.emailNotifyStatus.classList.remove('warn-text');
     } else {
-      els.emailNotifyStatus.textContent = `Plano ativo até ${formatDate(billing.expiresAt)} · Limite hoje: ${sentToday}/${dailyLimit}${
+      els.emailNotifyStatus.textContent = `Plano ativo${
+        billing.expiresAt ? ` até ${formatDate(billing.expiresAt)}` : ''
+      } · Limite hoje: ${sentToday}/${dailyLimit}${
         emailOn ? ' · e-mail ligado' : ' · clique para ativar e-mail'
       }`;
       els.emailNotifyStatus.classList.remove('warn-text');
@@ -350,11 +360,12 @@ function renderMonitors(monitors) {
     return;
   }
 
-  els.monitors.innerHTML = ordered
-    .map((m) => {
+  const showUpgradePromo = !hasPaidEmailAccess(currentUser) && ordered.length >= 2;
+  const cardsHtml = ordered
+    .map((m, index) => {
       const open = expandedIds.has(m.id);
       const events = eventsForMonitor(m.id);
-      return `
+      const card = `
       <article class="card accordion ${open ? 'is-open' : ''}" data-id="${m.id}">
         <button type="button" class="accordion-trigger" data-action="toggle-expand" aria-expanded="${open}">
           <span class="chevron" aria-hidden="true"></span>
@@ -388,8 +399,23 @@ function renderMonitors(monitors) {
           }
         </div>
       </article>`;
+      if (showUpgradePromo && index === 1) {
+        return (
+          card +
+          `
+      <aside class="upgrade-promo" role="note">
+        <p>
+          Para cadastrar mais sites e receber por e-mail suas notificações, escolha um de nossos planos.
+        </p>
+        <button type="button" class="btn primary" data-action="go-plans">Ver planos e pagar</button>
+      </aside>`
+        );
+      }
+      return card;
     })
     .join('');
+
+  els.monitors.innerHTML = cardsHtml;
 }
 
 function renderDashboard() {
@@ -825,6 +851,12 @@ async function handleDiffClick(eventId) {
 }
 
 els.monitors?.addEventListener('click', async (e) => {
+  const goPlans = e.target.closest('[data-action="go-plans"]');
+  if (goPlans) {
+    setView('billing');
+    return;
+  }
+
   const expandBtn = e.target.closest('[data-action="toggle-expand"]');
   if (expandBtn) {
     const id = expandBtn.closest('.card')?.dataset.id;
@@ -1416,9 +1448,8 @@ els.btnDesktopNotify?.addEventListener('click', async () => {
 });
 
 els.btnEmailNotify?.addEventListener('click', async () => {
-  const entitled = currentUser?.billing?.entitled === true;
-  if (!entitled) {
-    setView('billing');
+  if (!hasPaidEmailAccess(currentUser)) {
+    openEmailPlansDialog();
     return;
   }
   const enabled = currentUser?.emailNotifyStatus !== 'approved';
@@ -1431,10 +1462,36 @@ els.btnEmailNotify?.addEventListener('click', async () => {
     syncEmailNotifyUi(currentUser);
     if (data.message) billingFlash(data.message);
   } catch (err) {
-    if (err.message?.includes('plano') || err.message?.includes('Assine')) setView('billing');
-    else alert(err.message);
+    if (
+      err.message?.includes('plano') ||
+      err.message?.includes('Assine') ||
+      err.message?.includes('e-mail')
+    ) {
+      openEmailPlansDialog();
+    } else alert(err.message);
     syncEmailNotifyUi(currentUser);
   }
+});
+
+function openEmailPlansDialog() {
+  if (!els.emailPlansDialog) {
+    setView('billing');
+    return;
+  }
+  if (!els.emailPlansDialog.open) els.emailPlansDialog.showModal();
+}
+
+function closeEmailPlansDialog() {
+  els.emailPlansDialog?.close();
+}
+
+els.emailPlansClose?.addEventListener('click', () => closeEmailPlansDialog());
+els.emailPlansGo?.addEventListener('click', () => {
+  closeEmailPlansDialog();
+  setView('billing');
+});
+els.emailPlansDialog?.addEventListener('click', (e) => {
+  if (e.target === els.emailPlansDialog) closeEmailPlansDialog();
 });
 
 els.mpConfigForm?.addEventListener('submit', async (e) => {

@@ -111,7 +111,7 @@
                 </div>
                 <div id="email-notify-box" class="email-notify-box">
                   <p id="email-notify-status" class="hint">
-                    Assine um plano para liberar alertas por e-mail (novas contas: 30 dias grátis).
+                    Somente planos pagos enviam alertas por e-mail.
                   </p>
                 </div>
                 <p id="notify-status" class="hint">Permissão do navegador: desconhecida</p>
@@ -134,7 +134,7 @@
           <div class="panel billing-panel">
             <p class="lead">
               Escolha um plano para liberar notificações por e-mail e ampliar o limite de sites.
-              Contas novas têm 30 dias grátis com até 5 sites.
+              Contas novas têm período trial com limite de sites.
             </p>
             <p id="billing-status" class="hint"></p>
             <p id="billing-flash" class="hint" hidden></p>
@@ -257,6 +257,18 @@
         <button type="button" id="pix-copy-btn" class="btn primary pix-copy-btn">Copiar código</button>
         <p id="pix-waiting" class="pix-waiting">Aguardando confirmação do pagamento…</p>
         <p id="pix-status" class="pix-status" hidden></p>
+      </div>
+    </dialog>
+
+    <dialog id="email-plans-dialog" class="promo-dialog">
+      <div class="promo-body">
+        <button type="button" id="email-plans-close" class="pix-close" aria-label="Fechar">×</button>
+        <h3>Alertas por e-mail</h3>
+        <p>
+          Somente planos pagos enviam notificações por e-mail. No trial você monitora sites;
+          para receber alertas no e-mail, escolha um plano.
+        </p>
+        <button type="button" id="email-plans-go" class="btn primary">Ver planos</button>
       </div>
     </dialog>
 

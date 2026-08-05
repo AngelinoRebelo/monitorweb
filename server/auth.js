@@ -18,6 +18,7 @@ import {
   sendPasswordResetEmail,
 } from './mail.js';
 import {
+  canUseEmailAlerts,
   getBillingState,
   getEffectiveEmailDailyLimit,
   getEffectiveMonitorLimit,
@@ -219,7 +220,7 @@ function publicUser(user) {
   const sentToday =
     user.emailNotifySentDate === todayKey() ? Number(user.emailNotifySentCount) || 0 : 0;
   const billing = getBillingState(user);
-  const allowed = billing.entitled === true;
+  const emailOk = canUseEmailAlerts(user);
   return {
     id: user.id,
     email: user.email,
@@ -228,8 +229,8 @@ function publicUser(user) {
     maxMonitors: user.maxMonitors ?? DEFAULT_MAX_MONITORS,
     createdAt: user.createdAt,
     monitorCount: countMonitorsByUser(user.id),
-    emailNotifyAllowed: allowed,
-    emailNotifyStatus: allowed ? user.emailNotifyStatus || 'off' : 'off',
+    emailNotifyAllowed: emailOk,
+    emailNotifyStatus: emailOk ? user.emailNotifyStatus || 'off' : 'off',
     emailNotifyDailyLimit: getEffectiveEmailDailyLimit(user),
     emailNotifySentToday: sentToday,
     billingActive: user.billingActive !== false,
@@ -402,8 +403,7 @@ export function getUserQuota(userId) {
 export function getApprovedEmailNotify(userId) {
   const user = findUserById(userId);
   if (!user || user.active === false) return null;
-  const billing = getBillingState(user);
-  if (!billing.entitled) return null;
+  if (!canUseEmailAlerts(user)) return null;
   if (user.emailNotifyStatus !== 'approved') return null;
   return {
     email: user.email,
@@ -560,10 +560,10 @@ authRouter.post('/email-notify', (req, res) => {
   }
 
   const billing = getBillingState(user);
-  if (!billing.entitled) {
+  if (!canUseEmailAlerts(user)) {
     return res.status(402).json({
-      error: 'Assine um plano para liberar notificações por e-mail.',
-      code: 'BILLING_REQUIRED',
+      error: 'Somente planos pagos enviam alertas por e-mail. Escolha um plano para liberar.',
+      code: 'PAID_PLAN_REQUIRED',
       billing,
     });
   }
