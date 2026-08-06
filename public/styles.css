@@ -2409,6 +2409,12 @@ body.layout-edit-mode [data-layout-id].is-resizing {
   outline-style: solid;
 }
 
+body.layout-edit-mode [data-layout-id].is-moving {
+  outline-color: #f0c674;
+  outline-style: solid;
+  cursor: grabbing;
+}
+
 .layout-handles {
   position: absolute;
   inset: 0;
@@ -2423,6 +2429,25 @@ body.layout-edit-mode [data-layout-id].is-resizing {
   border: 1px solid #1a1408;
   border-radius: 2px;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.layout-handle-move {
+  top: 50%;
+  left: 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 999px;
+  cursor: grab;
+  background:
+    radial-gradient(circle at center, #f0c674 0 28%, transparent 29%),
+    #d4a24c;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  z-index: 6;
+}
+
+.layout-handle-move:active {
+  cursor: grabbing;
 }
 
 .layout-handle-n,

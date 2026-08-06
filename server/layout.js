@@ -25,6 +25,12 @@ export function getUiLayout() {
   }
 }
 
+function cleanCoord(value, min, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(Math.max(min, Math.min(max, n)));
+}
+
 export function saveUiLayout(blocks) {
   ensureDir();
   const clean = {};
@@ -32,11 +38,15 @@ export function saveUiLayout(blocks) {
     if (!id || typeof id !== 'string') continue;
     const key = id.trim().slice(0, 80);
     if (!key) continue;
-    const w = value?.w != null ? Number(value.w) : null;
-    const h = value?.h != null ? Number(value.h) : null;
     const next = {};
-    if (Number.isFinite(w) && w >= 160) next.w = Math.round(w);
-    if (Number.isFinite(h) && h >= 80) next.h = Math.round(h);
+    const w = cleanCoord(value?.w, 160, 4000);
+    const h = cleanCoord(value?.h, 80, 4000);
+    const x = cleanCoord(value?.x, -2400, 2400);
+    const y = cleanCoord(value?.y, -2400, 2400);
+    if (w != null) next.w = w;
+    if (h != null) next.h = h;
+    if (x != null) next.x = x;
+    if (y != null) next.y = y;
     if (Object.keys(next).length) clean[key] = next;
   }
   const payload = {

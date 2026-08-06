@@ -15,7 +15,7 @@ function blocksMap() {
   return { ...savedBlocks, ...draftBlocks };
 }
 
-function applySize(el, size) {
+function applyLayout(el, size) {
   if (!el || !size) return;
   if (size.w != null) {
     el.style.width = `${size.w}px`;
@@ -29,9 +29,22 @@ function applySize(el, size) {
     el.style.overflow = 'auto';
     el.style.boxSizing = 'border-box';
   }
+  const x = Number(size.x) || 0;
+  const y = Number(size.y) || 0;
+  if (x || y) {
+    el.style.position = 'relative';
+    el.style.zIndex = '6';
+    el.style.transform = `translate(${x}px, ${y}px)`;
+  } else {
+    el.style.transform = '';
+    if (!editing) {
+      el.style.position = '';
+      el.style.zIndex = '';
+    }
+  }
 }
 
-function clearSize(el) {
+function clearLayout(el) {
   if (!el) return;
   el.style.width = '';
   el.style.height = '';
@@ -39,6 +52,11 @@ function clearSize(el) {
   el.style.maxHeight = '';
   el.style.maxWidth = '';
   el.style.overflow = '';
+  el.style.transform = '';
+  el.style.position = '';
+  el.style.zIndex = '';
+  el.style.left = '';
+  el.style.top = '';
 }
 
 export function applyUiLayout(layout) {
@@ -47,8 +65,8 @@ export function applyUiLayout(layout) {
   document.querySelectorAll('[data-layout-id]').forEach((el) => {
     const id = el.dataset.layoutId;
     const size = blocksMap()[id];
-    if (size) applySize(el, size);
-    else if (!editing) clearSize(el);
+    if (size) applyLayout(el, size);
+    else if (!editing) clearLayout(el);
   });
 }
 
@@ -58,13 +76,22 @@ function collectCurrentSizes() {
     const id = el.dataset.layoutId;
     if (!id) return;
     const rect = el.getBoundingClientRect();
+    const prev = out[id] || {};
     const hasCustom =
-      el.style.width || el.style.height || out[id]?.w != null || out[id]?.h != null;
+      el.style.width ||
+      el.style.height ||
+      el.style.transform ||
+      prev.w != null ||
+      prev.h != null ||
+      prev.x != null ||
+      prev.y != null;
     if (!hasCustom && !editing) return;
     out[id] = {
-      ...(out[id] || {}),
+      ...prev,
       w: Math.round(rect.width),
       h: Math.round(rect.height),
+      x: Math.round(Number(prev.x) || 0),
+      y: Math.round(Number(prev.y) || 0),
     };
   });
   return out;
@@ -75,6 +102,13 @@ function ensureHandles(el) {
   const wrap = document.createElement('div');
   wrap.className = 'layout-handles';
   wrap.setAttribute('aria-hidden', 'true');
+
+  const move = document.createElement('span');
+  move.className = 'layout-handle layout-handle-move';
+  move.dataset.dir = 'move';
+  move.title = 'Arrastar bloco';
+  wrap.appendChild(move);
+
   for (const dir of HANDLES) {
     const h = document.createElement('span');
     h.className = `layout-handle layout-handle-${dir}`;
@@ -96,17 +130,26 @@ function setEditChrome(on) {
   document.body.classList.toggle('layout-edit-mode', on);
 }
 
+function applyToId(id, size) {
+  draftBlocks[id] = { ...(draftBlocks[id] || savedBlocks[id] || {}), ...size };
+  document.querySelectorAll(`[data-layout-id="${id.replace(/"/g, '')}"]`).forEach((node) => {
+    applyLayout(node, draftBlocks[id]);
+  });
+}
+
 function startEdit() {
   editing = true;
   draftBlocks = { ...savedBlocks };
   document.querySelectorAll('[data-layout-id]').forEach((el) => {
     ensureHandles(el);
-    const size = blocksMap()[el.dataset.layoutId];
-    if (size) applySize(el, size);
-    else {
-      const rect = el.getBoundingClientRect();
-      applySize(el, { w: Math.round(rect.width), h: Math.round(rect.height) });
-    }
+    const size = blocksMap()[el.dataset.layoutId] || {};
+    const rect = el.getBoundingClientRect();
+    applyLayout(el, {
+      w: size.w != null ? size.w : Math.round(rect.width),
+      h: size.h != null ? size.h : Math.round(rect.height),
+      x: Number(size.x) || 0,
+      y: Number(size.y) || 0,
+    });
   });
   setEditChrome(true);
 }
@@ -135,7 +178,9 @@ async function saveLayout() {
 
 async function resetLayout() {
   if (!apiFn) return;
-  if (!confirm('Restaurar o tamanho padrão de todos os blocos para todos os usuários?')) return;
+  if (!confirm('Restaurar o tamanho e posição padrão de todos os blocos para todos os usuários?')) {
+    return;
+  }
   const data = await apiFn('/admin/layout', { method: 'DELETE' });
   savedBlocks = {};
   draftBlocks = {};
@@ -152,49 +197,64 @@ function onPointerDown(e) {
   e.stopPropagation();
   const el = handle.closest('[data-layout-id]');
   if (!el) return;
+  const id = el.dataset.layoutId;
+  const prev = blocksMap()[id] || {};
   const rect = el.getBoundingClientRect();
   dragState = {
     el,
-    id: el.dataset.layoutId,
+    id,
     dir: handle.dataset.dir,
     startX: e.clientX,
     startY: e.clientY,
     startW: rect.width,
     startH: rect.height,
-    startLeft: rect.left,
-    startTop: rect.top,
+    startOffX: Number(prev.x) || 0,
+    startOffY: Number(prev.y) || 0,
   };
-  el.classList.add('is-resizing');
+  el.classList.add(dragState.dir === 'move' ? 'is-moving' : 'is-resizing');
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp, { once: true });
 }
 
 function onPointerMove(e) {
   if (!dragState) return;
-  const { el, id, dir, startX, startY, startW, startH } = dragState;
+  const { id, dir, startX, startY, startW, startH, startOffX, startOffY } = dragState;
   const dx = e.clientX - startX;
   const dy = e.clientY - startY;
+
+  if (dir === 'move') {
+    applyToId(id, {
+      x: Math.round(startOffX + dx),
+      y: Math.round(startOffY + dy),
+    });
+    return;
+  }
+
   let w = startW;
   let h = startH;
+  let x = startOffX;
+  let y = startOffY;
   if (dir.includes('e')) w = startW + dx;
-  if (dir.includes('w')) w = startW - dx;
+  if (dir.includes('w')) {
+    w = startW - dx;
+    x = startOffX + dx;
+  }
   if (dir.includes('s')) h = startH + dy;
-  if (dir.includes('n')) h = startH - dy;
+  if (dir.includes('n')) {
+    h = startH - dy;
+    y = startOffY + dy;
+  }
 
-  const parent = el.parentElement;
-  const parentW = parent?.clientWidth || window.innerWidth;
-  w = Math.max(180, Math.min(w, parentW));
+  w = Math.max(180, w);
   h = Math.max(100, h);
-
-  draftBlocks[id] = { w: Math.round(w), h: Math.round(h) };
-  // Shared ids: apply to all matching nodes
-  document.querySelectorAll(`[data-layout-id="${id.replace(/"/g, '')}"]`).forEach((node) => {
-    applySize(node, draftBlocks[id]);
-  });
+  applyToId(id, { w: Math.round(w), h: Math.round(h), x: Math.round(x), y: Math.round(y) });
 }
 
 function onPointerUp() {
-  if (dragState?.el) dragState.el.classList.remove('is-resizing');
+  if (dragState?.el) {
+    dragState.el.classList.remove('is-resizing');
+    dragState.el.classList.remove('is-moving');
+  }
   dragState = null;
   window.removeEventListener('pointermove', onPointerMove);
 }
