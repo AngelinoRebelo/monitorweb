@@ -230,52 +230,52 @@
                     <button type="submit" class="btn primary">Salvar Mercado Pago</button>
                   </form>
 
-                  <form id="reconcile-form" class="card billing-card">
-                    <h2>Liberar pagamento manual</h2>
-                    <p class="hint">
-                      Se o Pix ou cartão já foi pago e o plano não liberou, cole o ID do pagamento no Mercado Pago.
-                    </p>
-                    <label>
-                      ID do pagamento (MP)
-                      <input id="mp-reconcile-id" type="text" placeholder="ex.: 171262618363" />
-                    </label>
-                    <button type="submit" class="btn primary">Confirmar e liberar</button>
-                  </form>
+                  <div class="card billing-card billing-card-stack">
+                    <form id="reconcile-form" class="billing-card-block">
+                      <h2>Liberar pagamento manual</h2>
+                      <p class="hint">
+                        Se o Pix ou cartão já foi pago e o plano não liberou, cole o ID do pagamento no Mercado Pago.
+                      </p>
+                      <label>
+                        ID do pagamento (MP)
+                        <input id="mp-reconcile-id" type="text" placeholder="ex.: 171262618363" />
+                      </label>
+                      <button type="submit" class="btn primary">Confirmar e liberar</button>
+                    </form>
+
+                    <form id="trial-config-form" class="billing-card-block billing-card-block-split">
+                      <h2>Plano trial</h2>
+                      <p class="hint">Padrão das contas novas no período gratuito.</p>
+                      <div class="trial-admin-row">
+                        <label>
+                          Dias
+                          <input id="billing-trial-days" type="number" min="0" max="365" value="30" />
+                        </label>
+                        <label>
+                          E-mails / dia
+                          <input id="billing-trial-emails" type="number" min="0" max="500" value="10" />
+                        </label>
+                        <label>
+                          Sites iniciais
+                          <input id="billing-trial-sites" type="number" min="1" max="1000" value="5" />
+                        </label>
+                      </div>
+                      <button type="submit" class="btn primary">Salvar trial</button>
+                    </form>
+                  </div>
                 </div>
               </section>
 
               <section class="billing-section" aria-labelledby="billing-sec-commercial">
                 <h3 id="billing-sec-commercial" class="billing-section-title">Configuração comercial</h3>
-                <div class="billing-admin-grid billing-admin-grid-commercial">
-                  <form id="trial-config-form" class="card billing-card">
-                    <h2>Plano trial</h2>
-                    <p class="hint">Padrão das contas novas no período gratuito.</p>
-                    <div class="trial-admin-row">
-                      <label>
-                        Dias
-                        <input id="billing-trial-days" type="number" min="0" max="365" value="30" />
-                      </label>
-                      <label>
-                        E-mails / dia
-                        <input id="billing-trial-emails" type="number" min="0" max="500" value="10" />
-                      </label>
-                      <label>
-                        Sites iniciais
-                        <input id="billing-trial-sites" type="number" min="1" max="1000" value="5" />
-                      </label>
-                    </div>
-                    <button type="submit" class="btn primary">Salvar trial</button>
-                  </form>
-
-                  <form id="plans-admin-form" class="card billing-card billing-card-plans">
-                    <div class="section-head plans-admin-head">
-                      <h2>Planos e valores</h2>
-                      <button type="button" id="btn-add-plan" class="btn small">Novo plano</button>
-                    </div>
-                    <div id="plans-admin-list" class="plans-admin-list"></div>
-                    <button type="submit" class="btn primary">Salvar planos</button>
-                  </form>
-                </div>
+                <form id="plans-admin-form" class="card billing-card billing-card-plans">
+                  <div class="section-head plans-admin-head">
+                    <h2>Planos e valores</h2>
+                    <button type="button" id="btn-add-plan" class="btn small">Novo plano</button>
+                  </div>
+                  <div id="plans-admin-list" class="plans-admin-list"></div>
+                  <button type="submit" class="btn primary">Salvar planos</button>
+                </form>
               </section>
 
               <section class="billing-section" aria-labelledby="billing-sec-subs">
