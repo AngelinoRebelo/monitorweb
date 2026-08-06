@@ -343,11 +343,12 @@ export async function checkMonitor(id, { previousContent } = {}) {
     if (kind === 'html' || kind === 'html-shell') {
       const blocked = detectUnusableCapture(rawHtml, content);
       if (blocked) {
-        // Silent skip: do not surface captcha/restricted noise in the UI.
+        // Silent skip: captcha/restricted pages are not real failures — clear any
+        // stuck "error" badge from a previous attempt so the UI stays healthy.
         const result = saveCheckResult(id, {
           hash: null,
           content: null,
-          status: monitor.lastStatus === 'changed' ? 'ok' : monitor.lastStatus || 'ok',
+          status: 'ok',
           error: null,
           changed: false,
           updateHash: false,
