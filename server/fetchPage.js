@@ -14,6 +14,51 @@ const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS) || 20000;
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
 
+/** @type {Map<string, Map<string, string>>} */
+const cookieJars = new Map();
+
+function jarFor(host) {
+  if (!host) return null;
+  if (!cookieJars.has(host)) cookieJars.set(host, new Map());
+  return cookieJars.get(host);
+}
+
+function cookieHeaderFor(host) {
+  const jar = jarFor(host);
+  if (!jar?.size) return '';
+  return [...jar.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
+}
+
+function storeSetCookie(host, setCookieHeader) {
+  const jar = jarFor(host);
+  if (!jar || !setCookieHeader) return;
+  const parts = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
+  for (const raw of parts) {
+    const first = String(raw || '').split(';')[0];
+    const eq = first.indexOf('=');
+    if (eq <= 0) continue;
+    const name = first.slice(0, eq).trim();
+    const value = first.slice(eq + 1).trim();
+    if (!name) continue;
+    if (!value || /delete|expired/i.test(value)) jar.delete(name);
+    else jar.set(name, value);
+  }
+}
+
+function rememberCookies(host, headersLike) {
+  if (!host || !headersLike) return;
+  const get = headersLike.get?.bind(headersLike);
+  if (!get) return;
+  // Node/undici may expose getSetCookie(); fallback to single header.
+  const many = headersLike.getSetCookie?.();
+  if (Array.isArray(many) && many.length) {
+    storeSetCookie(host, many);
+    return;
+  }
+  const single = get('set-cookie');
+  if (single) storeSetCookie(host, single);
+}
+
 function isClassicHttpProxy(url) {
   try {
     const u = new URL(url);
@@ -96,7 +141,7 @@ export function formatFetchError(err, url = '') {
   return code ? `${detail} (${code})` : detail;
 }
 
-function buildHeaders(url, { accept } = {}) {
+function buildHeaders(url, { accept, method, contentType, headers, cookieHost } = {}) {
   let origin = '';
   let referer = '';
   try {
@@ -106,7 +151,15 @@ function buildHeaders(url, { accept } = {}) {
   } catch {
     /* ignore */
   }
-  return {
+  const host = cookieHost || (() => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return '';
+    }
+  })();
+  const cookie = cookieHeaderFor(host);
+  const base = {
     'User-Agent': USER_AGENT,
     Accept:
       accept ||
@@ -116,8 +169,11 @@ function buildHeaders(url, { accept } = {}) {
     Pragma: 'no-cache',
     Connection: 'close',
     ...(referer ? { Referer: referer } : {}),
-    ...(origin ? { Origin: origin } : {}),
+    ...(origin && method && method !== 'GET' ? { Origin: origin } : {}),
+    ...(contentType ? { 'Content-Type': contentType } : {}),
+    ...(cookie ? { Cookie: cookie } : {}),
   };
+  return { ...base, ...(headers || {}) };
 }
 
 export async function decodeResponseBody(resLike) {
@@ -151,14 +207,23 @@ function headerMapToGetters(headers) {
   };
 }
 
-async function fetchWithNodeHttp(url, { accept } = {}) {
+async function fetchWithNodeHttp(url, opts = {}) {
+  const method = String(opts.method || 'GET').toUpperCase();
   const u = new URL(url);
   const { address } = await dnsPromises.lookup(u.hostname, { family: 4 });
   const lib = u.protocol === 'http:' ? http : https;
+  const host = opts.cookieHost || u.hostname;
   const headers = {
-    ...buildHeaders(url, { accept }),
+    ...buildHeaders(url, { ...opts, cookieHost: host }),
     Host: u.hostname,
   };
+  const bodyBuf =
+    method === 'GET' || method === 'HEAD'
+      ? null
+      : Buffer.isBuffer(opts.body)
+        ? opts.body
+        : Buffer.from(opts.body || '', 'utf8');
+  if (bodyBuf && !headers['Content-Length']) headers['Content-Length'] = String(bodyBuf.length);
 
   return await new Promise((resolve, reject) => {
     const req = lib.request(
@@ -168,7 +233,7 @@ async function fetchWithNodeHttp(url, { accept } = {}) {
         servername: u.hostname,
         port: u.port || (u.protocol === 'http:' ? 80 : 443),
         path: `${u.pathname}${u.search}`,
-        method: 'GET',
+        method,
         headers,
         family: 4,
         timeout: FETCH_TIMEOUT_MS,
@@ -178,6 +243,9 @@ async function fetchWithNodeHttp(url, { accept } = {}) {
         const chunks = [];
         res.on('data', (c) => chunks.push(c));
         res.on('end', () => {
+          rememberCookies(host, headerMapToGetters(res.headers));
+          const rawSet = res.headers['set-cookie'];
+          if (rawSet) storeSetCookie(host, rawSet);
           resolve({
             ok: res.statusCode >= 200 && res.statusCode < 300,
             status: res.statusCode,
@@ -198,11 +266,21 @@ async function fetchWithNodeHttp(url, { accept } = {}) {
       req.destroy(Object.assign(new Error('Timeout de conexão'), { code: 'ETIMEDOUT' }));
     });
     req.on('error', reject);
+    if (bodyBuf) req.write(bodyBuf);
     req.end();
   });
 }
 
-async function fetchWithCurl(url, { accept } = {}) {
+async function fetchWithCurl(url, opts = {}) {
+  const method = String(opts.method || 'GET').toUpperCase();
+  const host = opts.cookieHost || (() => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return '';
+    }
+  })();
+  const headers = buildHeaders(url, { ...opts, cookieHost: host });
   const args = [
     '-sS',
     '-L',
@@ -211,17 +289,19 @@ async function fetchWithCurl(url, { accept } = {}) {
     '--ipv4',
     '-A',
     USER_AGENT,
-    '-H',
-    `Accept: ${
-      accept ||
-      'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
-    }`,
-    '-H',
-    'Accept-Language: pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    '-X',
+    method,
     '-w',
     '\n__MW_META__:%{http_code}|%{content_type}',
     url,
   ];
+  for (const [k, v] of Object.entries(headers)) {
+    if (k.toLowerCase() === 'user-agent') continue;
+    args.splice(args.length - 1, 0, '-H', `${k}: ${v}`);
+  }
+  if (method !== 'GET' && method !== 'HEAD' && opts.body != null) {
+    args.splice(args.length - 1, 0, '--data-binary', String(opts.body));
+  }
   const proxy = proxyUrl();
   if (proxy) args.splice(1, 0, '-x', proxy);
 
@@ -253,10 +333,19 @@ async function fetchWithCurl(url, { accept } = {}) {
   };
 }
 
-async function fetchWithRelay(url, { accept } = {}) {
+async function fetchWithRelay(url, opts = {}) {
   const relay = relayConfig();
   if (!relay) throw new Error('Relay não configurado');
   if (!relay.secret) throw new Error('FETCH_RELAY_SECRET não configurado');
+  const method = String(opts.method || 'GET').toUpperCase();
+  const host = opts.cookieHost || (() => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return '';
+    }
+  })();
+  const cookie = cookieHeaderFor(host);
 
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -268,7 +357,17 @@ async function fetchWithRelay(url, { accept } = {}) {
           Authorization: `Bearer ${relay.secret}`,
           'X-Relay-Secret': relay.secret,
         },
-        body: JSON.stringify({ url, accept: accept || undefined }),
+        body: JSON.stringify({
+          url,
+          accept: opts.accept || undefined,
+          method,
+          body: method === 'GET' || method === 'HEAD' ? undefined : opts.body || '',
+          contentType: opts.contentType || undefined,
+          headers: {
+            ...(opts.headers || {}),
+            ...(cookie ? { Cookie: cookie } : {}),
+          },
+        }),
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS + 15000),
       });
 
@@ -285,6 +384,7 @@ async function fetchWithRelay(url, { accept } = {}) {
         });
       }
 
+      if (payload.setCookie) storeSetCookie(host, payload.setCookie);
       const body = Buffer.from(payload.bodyBase64 || '', 'base64');
       return {
         ok: Boolean(payload.ok),
@@ -307,13 +407,24 @@ async function fetchWithRelay(url, { accept } = {}) {
   throw lastError || new Error('Falha no relay');
 }
 
-async function fetchWithUndici(url, { accept } = {}) {
+async function fetchWithUndici(url, opts = {}) {
+  const method = String(opts.method || 'GET').toUpperCase();
+  const host = opts.cookieHost || (() => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return '';
+    }
+  })();
   const res = await undiciFetch(url, {
+    method,
     redirect: 'follow',
-    headers: buildHeaders(url, { accept }),
+    headers: buildHeaders(url, { ...opts, cookieHost: host }),
+    body: method === 'GET' || method === 'HEAD' ? undefined : opts.body || '',
     dispatcher: dispatcher(),
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
+  rememberCookies(host, res.headers);
   const body = Buffer.from(await res.arrayBuffer());
   return {
     ok: res.ok,
@@ -330,7 +441,7 @@ async function fetchWithUndici(url, { accept } = {}) {
   };
 }
 
-export async function fetchResponse(url, { accept } = {}) {
+export async function fetchResponse(url, opts = {}) {
   const strategies = [];
   if (relayConfig()) strategies.push(['relay', fetchWithRelay]);
   // If PROXY_URL points to our relay-style URL by mistake, still try classic paths.
@@ -339,7 +450,7 @@ export async function fetchResponse(url, { accept } = {}) {
   let lastError;
   for (const [name, fn] of strategies) {
     try {
-      const res = await fn(url, { accept });
+      const res = await fn(url, opts);
       if (!res) throw new Error(`Estratégia ${name} sem resposta`);
       return res;
     } catch (err) {

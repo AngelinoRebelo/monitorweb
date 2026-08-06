@@ -4,6 +4,7 @@ import { createTwoFilesPatch } from 'diff';
 import { getMonitor, saveCheckResult, updateMonitor } from './db.js';
 import { buildHumanChanges } from './humanDiff.js';
 import { fetchResponse, decodeResponseBody, formatFetchError } from './fetchPage.js';
+import { hasUsefulSeiContent, isSeiCaptchaWall, isSeiEmptyOrMissing } from './seiCapture.js';
 
 const VOLATILE_JSON_KEYS = new Set([
   '_snapshotAt',
@@ -16,6 +17,8 @@ const VOLATILE_JSON_KEYS = new Set([
 
 /** New content must appear this many consecutive checks before counting as a real change. */
 const CHANGE_CONFIRMATIONS = 2;
+/** SEI already filters to protocol/andamento tables — confirm on first stable useful capture. */
+const SEI_CHANGE_CONFIRMATIONS = 1;
 
 function normalizeText(text) {
   return text
@@ -87,18 +90,18 @@ function scrubVolatileText(text) {
  * or be reported as content changes.
  */
 function detectUnusableCapture(html, text) {
-  const blob = `${html || ''}\n${text || ''}`.toLowerCase();
-  if (/digite o c[oó]digo da imagem/.test(blob)) {
+  // Real process tables always win — SEI pages often keep a captcha widget in the DOM.
+  if (hasUsefulSeiContent(text)) return null;
+
+  if (isSeiCaptchaWall(html, text)) {
     return 'Captcha do SEI detectado; captura ignorada (não é alteração do processo).';
   }
+  if (isSeiEmptyOrMissing(html, text)) {
+    return 'Página SEI sem conteúdo do processo; captura ignorada.';
+  }
+  const blob = `${html || ''}\n${text || ''}`.toLowerCase();
   if (/processo ou documento de acesso restrito/.test(blob)) {
-    const hasUseful =
-      /lista de protocolos|lista de andamentos/i.test(text) &&
-      /(despacho|of[ií]cio|publica[cç][aã]o|anexo|externo)/i.test(text) &&
-      String(text).length > 800;
-    if (!hasUseful) {
-      return 'Página de acesso restrito sem conteúdo útil; captura ignorada.';
-    }
+    return 'Página de acesso restrito sem conteúdo útil; captura ignorada.';
   }
   return null;
 }
@@ -106,9 +109,19 @@ function detectUnusableCapture(html, text) {
 function extractSeiRelevantText(html) {
   const $ = cheerio.load(html);
   $('script, style, noscript, svg, iframe').remove();
-  // Do not remove <form>: SEI wraps almost the whole page in a form.
+  // Prefer protocol/andamento tables; ignore captcha chrome that often remains in the DOM.
+  $('#divInfraCaptcha, #imgCaptcha, label[for="txtInfraCaptcha"]').remove();
+  $('input[name="txtInfraCaptcha"], input[name="hdnInfraCaptcha"]').remove();
   $('img[src*="aptcha"], img[src*="Captcha"], img[id*="Captcha"], img[id*="captcha"]').each((_, el) => {
-    $(el).closest('tr, div').first().remove();
+    $(el).closest('tr, div, label').first().remove();
+  });
+  // Drop very small decorative tables; keep process lists.
+  $('table').each((_, el) => {
+    const $el = $(el);
+    const sample = $el.text().replace(/\s+/g, ' ').trim();
+    if (/Digite o c[oó]digo|Informe o c[oó]digo de confirma/i.test(sample) && sample.length < 120) {
+      $el.remove();
+    }
   });
 
   const chunks = [];
@@ -237,7 +250,8 @@ function summarizeRifaJson(content) {
  * Decide if hash change is confirmed (debounce) or still pending.
  * Returns { changed, isFirst, pendingHash, pendingHashCount, pendingContent, statusNote }
  */
-function resolveChangeState(monitor, hash, content, { switchedToApi }) {
+function resolveChangeState(monitor, hash, content, { switchedToApi, confirmations }) {
+  const needed = Math.max(1, Number(confirmations) || CHANGE_CONFIRMATIONS);
   const isFirst = !monitor.lastHash || switchedToApi;
   if (isFirst) {
     return {
@@ -266,7 +280,7 @@ function resolveChangeState(monitor, hash, content, { switchedToApi }) {
   const samePending = monitor.pendingHash === hash;
   const count = samePending ? Number(monitor.pendingHashCount || 0) + 1 : 1;
 
-  if (count >= CHANGE_CONFIRMATIONS) {
+  if (count >= needed) {
     return {
       changed: true,
       isFirst: false,
@@ -285,7 +299,7 @@ function resolveChangeState(monitor, hash, content, { switchedToApi }) {
     pendingHashCount: count,
     pendingContent: content.slice(0, 200000),
     updateBaseline: false,
-    statusNote: `Possível alteração — confirmando (${count}/${CHANGE_CONFIRMATIONS})`,
+    statusNote: `Possível alteração — confirmando (${count}/${needed})`,
   };
 }
 
@@ -309,7 +323,17 @@ export async function checkMonitor(id, { previousContent } = {}) {
       sourceUrl = earlyJson.sourceUrl;
       kind = 'json';
     } else {
-      const res = await fetchResponse(monitor.url);
+      const res = await fetchResponse(monitor.url, {
+        cookieHost: isSeiUrl(monitor.url)
+          ? (() => {
+              try {
+                return new URL(monitor.url).hostname;
+              } catch {
+                return '';
+              }
+            })()
+          : '',
+      });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status} ${res.statusText}`);
       }
@@ -355,7 +379,9 @@ export async function checkMonitor(id, { previousContent } = {}) {
           contentKind: kind,
           sourceUrl,
         });
-        console.warn(`[monitor] ${monitor.name}: ${blocked}`);
+        console.warn(
+          `[monitor] ${monitor.name}: ${blocked} (texto=${String(content || '').length}c useful=${hasUsefulSeiContent(content)})`
+        );
         return { ...result, changed: false, error: null, isFirst: false, kind, skipped: true };
       }
     }
@@ -368,7 +394,10 @@ export async function checkMonitor(id, { previousContent } = {}) {
       !previousContent.trim().startsWith('{');
     const switchedToApi = kind === 'json' && prevWasShell;
 
-    const decision = resolveChangeState(monitor, hash, content, { switchedToApi });
+    const decision = resolveChangeState(monitor, hash, content, {
+      switchedToApi,
+      confirmations: isSeiUrl(monitor.url) ? SEI_CHANGE_CONFIRMATIONS : CHANGE_CONFIRMATIONS,
+    });
     const { changed, isFirst } = decision;
 
     let summary = isFirst

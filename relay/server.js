@@ -12,7 +12,7 @@ const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
 
 app.disable('x-powered-by');
-app.use(express.json({ limit: '32kb' }));
+app.use(express.json({ limit: '2mb' }));
 
 function unauthorized(res) {
   return res.status(401).json({ ok: false, error: 'Não autorizado' });
@@ -40,6 +40,16 @@ app.get('/health', (_req, res) => {
 app.post('/v1/fetch', requireAuth, async (req, res) => {
   const url = String(req.body?.url || '').trim();
   const accept = String(req.body?.accept || '').trim();
+  const method = String(req.body?.method || 'GET').toUpperCase();
+  const contentType = String(req.body?.contentType || '').trim();
+  const extraHeaders =
+    req.body?.headers && typeof req.body.headers === 'object' ? req.body.headers : {};
+  const body =
+    method === 'GET' || method === 'HEAD'
+      ? undefined
+      : req.body?.body != null
+        ? String(req.body.body)
+        : undefined;
 
   try {
     const parsed = new URL(url);
@@ -58,6 +68,7 @@ app.post('/v1/fetch', requireAuth, async (req, res) => {
     const upstream = await fetch(url, {
       signal: controller.signal,
       redirect: 'follow',
+      method,
       headers: {
         'User-Agent': USER_AGENT,
         Accept:
@@ -73,20 +84,34 @@ app.post('/v1/fetch', requireAuth, async (req, res) => {
             return '';
           }
         })(),
+        ...(contentType ? { 'Content-Type': contentType } : {}),
+        ...Object.fromEntries(
+          Object.entries(extraHeaders)
+            .filter(([k, v]) => k && v != null && v !== '')
+            .map(([k, v]) => [String(k), String(v)])
+        ),
       },
+      body,
     });
 
     const buf = Buffer.from(await upstream.arrayBuffer());
-    const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
+    const contentTypeOut = upstream.headers.get('content-type') || 'application/octet-stream';
+    const setCookie =
+      typeof upstream.headers.getSetCookie === 'function'
+        ? upstream.headers.getSetCookie()
+        : upstream.headers.get('set-cookie')
+          ? [upstream.headers.get('set-cookie')]
+          : [];
 
     res.status(200).json({
       ok: upstream.ok,
       status: upstream.status,
       statusText: upstream.statusText,
-      contentType,
+      contentType: contentTypeOut,
       elapsedMs: Date.now() - started,
       bodyBase64: buf.toString('base64'),
       bytes: buf.length,
+      setCookie,
       relayRegion: process.env.FLY_REGION || null,
     });
   } catch (err) {

@@ -42,6 +42,17 @@ export default {
 
       const target = String(payload?.url || '').trim();
       const accept = String(payload?.accept || '').trim();
+      const method = String(payload?.method || 'GET').toUpperCase();
+      const contentType = String(payload?.contentType || '').trim();
+      const extraHeaders =
+        payload?.headers && typeof payload.headers === 'object' ? payload.headers : {};
+      const body =
+        method === 'GET' || method === 'HEAD'
+          ? undefined
+          : payload?.body != null
+            ? String(payload.body)
+            : undefined;
+
       try {
         const parsed = new URL(target);
         if (!['http:', 'https:'].includes(parsed.protocol)) {
@@ -55,6 +66,7 @@ export default {
       try {
         const upstream = await fetch(target, {
           redirect: 'follow',
+          method,
           headers: {
             'User-Agent': USER_AGENT,
             Accept:
@@ -64,9 +76,17 @@ export default {
             'Cache-Control': 'no-cache',
             Pragma: 'no-cache',
             Referer: `${new URL(target).origin}/`,
+            ...(contentType ? { 'Content-Type': contentType } : {}),
+            ...Object.fromEntries(
+              Object.entries(extraHeaders)
+                .filter(([k, v]) => k && v != null && v !== '')
+                .map(([k, v]) => [String(k), String(v)])
+            ),
           },
+          body,
         });
         const buf = new Uint8Array(await upstream.arrayBuffer());
+        const setCookie = upstream.headers.getSetCookie?.() || [];
         return Response.json({
           ok: upstream.ok,
           status: upstream.status,
@@ -75,6 +95,7 @@ export default {
           elapsedMs: Date.now() - started,
           bodyBase64: bytesToBase64(buf),
           bytes: buf.length,
+          setCookie,
           relayRegion: 'cloudflare',
           colo: request.cf?.colo || null,
           placement: 'aws:sa-east-1',
