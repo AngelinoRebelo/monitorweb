@@ -343,17 +343,19 @@ export async function checkMonitor(id, { previousContent } = {}) {
     if (kind === 'html' || kind === 'html-shell') {
       const blocked = detectUnusableCapture(rawHtml, content);
       if (blocked) {
+        // Silent skip: do not surface captcha/restricted noise in the UI.
         const result = saveCheckResult(id, {
           hash: null,
           content: null,
-          status: 'error',
-          error: blocked,
+          status: monitor.lastStatus === 'changed' ? 'ok' : monitor.lastStatus || 'ok',
+          error: null,
           changed: false,
           updateHash: false,
           contentKind: kind,
           sourceUrl,
         });
-        return { ...result, changed: false, error: blocked, isFirst: false, kind };
+        console.warn(`[monitor] ${monitor.name}: ${blocked}`);
+        return { ...result, changed: false, error: null, isFirst: false, kind, skipped: true };
       }
     }
 
