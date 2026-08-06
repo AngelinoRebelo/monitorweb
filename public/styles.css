@@ -682,6 +682,119 @@ body {
     radial-gradient(circle at 30% 30%, #fff6, transparent 50%);
   box-shadow: 0 0 0 1px rgba(212, 162, 76, 0.35), 0 10px 30px rgba(0, 0, 0, 0.25);
   animation: pulse 3.2s ease-in-out infinite;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.mark.mark-img {
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+  display: grid;
+  place-items: center;
+}
+
+.mark.mark-img[hidden] {
+  display: none;
+}
+
+.mark.mark-img img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 0.85rem;
+}
+
+.wordmark-img {
+  display: block;
+  height: 2.55rem;
+  width: auto;
+  max-width: min(100%, 15rem);
+}
+
+.logo-picker {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.15rem 0 0.35rem;
+}
+
+.logo-picker-title {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.logo-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.logo-option {
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--ink);
+  border-radius: 12px;
+  padding: 0.55rem 0.4rem;
+  display: grid;
+  gap: 0.35rem;
+  justify-items: center;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.logo-option img {
+  width: 2.4rem;
+  height: 2.4rem;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.logo-option img.logo-option-wide {
+  width: 100%;
+  height: 1.7rem;
+  object-fit: contain;
+}
+
+.logo-option:hover {
+  border-color: rgba(212, 162, 76, 0.55);
+}
+
+.logo-option.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(212, 162, 76, 0.45);
+  background: rgba(212, 162, 76, 0.12);
+}
+
+.logo-picker-side {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0 0.35rem 0.35rem;
+  margin-bottom: 0.25rem;
+}
+
+.logo-chip {
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.logo-chip.is-active {
+  color: var(--accent-ink);
+  background: linear-gradient(135deg, #d4a24c, #b8863a);
+  border-color: transparent;
 }
 
 .brand-name {
@@ -1375,7 +1488,7 @@ dialog::backdrop {
 }
 
 .auth-card {
-  width: min(420px, 100%);
+  width: min(460px, 100%);
   padding: 1.75rem;
   display: grid;
   gap: 0.9rem;

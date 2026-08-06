@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 128" role="img" aria-label="MonitorWeb  opção C">
+  <defs>
+    <linearGradient id="c-gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e2b65a"/>
+      <stop offset="100%" stop-color="#9a7028"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#0f2f24"/>
+  <circle cx="64" cy="64" r="42" fill="none" stroke="url(#c-gold)" stroke-width="5"/>
+  <circle cx="64" cy="64" r="26" fill="none" stroke="#d4a24c" stroke-width="4"/>
+  <circle cx="64" cy="64" r="10" fill="#e8f3ec"/>
+  <path d="M64 64 L90 42" stroke="#f0c674" stroke-width="3.5" stroke-linecap="round"/>
+  <text x="152" y="78" font-family="Georgia, 'Times New Roman', serif" font-size="52" font-weight="700" fill="#e8f3ec" letter-spacing="-1.5">MonitorWeb</text>
+</svg>

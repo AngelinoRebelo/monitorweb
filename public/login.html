@@ -21,10 +21,29 @@
     <main class="auth-shell">
       <section class="auth-card panel">
         <div class="brand auth-brand">
-          <span class="mark" aria-hidden="true"></span>
-          <div>
+          <span class="mark mark-img" data-brand-mark aria-hidden="true"></span>
+          <div data-brand-wordmark hidden></div>
+          <div data-brand-text>
             <p class="brand-name">MonitorWeb</p>
             <p class="brand-sub">acesso protegido</p>
+          </div>
+        </div>
+
+        <div class="logo-picker" aria-label="Escolher logo para comparar">
+          <p class="logo-picker-title">Compare as logos</p>
+          <div class="logo-picker-grid">
+            <button type="button" class="logo-option" data-logo-option="a">
+              <img src="/logos/logo-a.svg" alt="" />
+              <span>A · Radar</span>
+            </button>
+            <button type="button" class="logo-option" data-logo-option="b">
+              <img src="/logos/logo-b.svg" alt="" />
+              <span>B · Sinal</span>
+            </button>
+            <button type="button" class="logo-option" data-logo-option="c">
+              <img src="/logos/logo-c.svg" alt="" class="logo-option-wide" />
+              <span>C · Wordmark</span>
+            </button>
           </div>
         </div>
 
