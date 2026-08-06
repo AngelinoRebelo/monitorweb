@@ -292,7 +292,15 @@
       <div class="pix-body pay-body">
         <button type="button" id="pix-close" class="pix-close" aria-label="Fechar">×</button>
         <h3 id="pix-title">Pagar plano</h3>
-        <p id="pix-summary" class="pix-amount"></p>
+
+        <div id="pay-operation" class="pay-operation" aria-live="polite">
+          <div class="pay-operation-head">
+            <p id="pay-op-label" class="pay-op-label">—</p>
+            <p id="pix-summary" class="pix-amount pay-op-price">R$ —</p>
+          </div>
+          <p id="pay-op-desc" class="pay-op-desc"></p>
+          <ul id="pay-op-details" class="pay-op-details"></ul>
+        </div>
 
         <div class="pay-method-tabs" role="tablist" aria-label="Forma de pagamento">
           <button type="button" class="pay-method-tab is-active" data-pay-method="pix" role="tab" aria-selected="true">

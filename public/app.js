@@ -34,6 +34,9 @@ const els = {
   payCardPane: $('#pay-card-pane'),
   cardPayStatus: $('#card-pay-status'),
   cardBrickContainer: $('#cardPaymentBrick_container'),
+  payOpLabel: $('#pay-op-label'),
+  payOpDesc: $('#pay-op-desc'),
+  payOpDetails: $('#pay-op-details'),
   emailPlansDialog: $('#email-plans-dialog'),
   emailPlansClose: $('#email-plans-close'),
   emailPlansGo: $('#email-plans-go'),
@@ -1507,14 +1510,46 @@ function startPaymentPoll(localId) {
   }, 3000);
 }
 
-function openPayDialog(plan) {
-  if (!els.pixDialog || !plan) return;
-  pendingPayPlan = plan;
-  const amount = Number(plan.price || 0);
-  if (els.pixTitle) els.pixTitle.textContent = `Pagar · ${plan.label || 'plano'}`;
+function fillPayOperation(plan) {
+  const amount = Number(plan?.price || 0);
+  const days = Number(plan?.days) || 0;
+  const maxSites = Number(plan?.maxMonitors) || 100;
+  const label = plan?.label || 'Plano';
+  const features =
+    Array.isArray(plan?.features) && plan.features.length
+      ? plan.features
+      : ['Alertas por e-mail', `Até ${maxSites} sites para monitoramento`];
+
+  if (els.pixTitle) els.pixTitle.textContent = 'Confirmar pagamento';
+  if (els.payOpLabel) els.payOpLabel.textContent = label;
   if (els.pixSummary) {
     els.pixSummary.textContent = `R$ ${amount.toFixed(2).replace('.', ',')}`;
   }
+  if (els.payOpDesc) {
+    els.payOpDesc.textContent =
+      'Você está pagando a liberação deste plano no MonitorWeb: alertas por e-mail e limite ampliado de sites pelo período contratado.';
+  }
+  if (els.payOpDetails) {
+    const rows = [
+      ['Produto', `Assinatura MonitorWeb · ${label}`],
+      ['Valor', `R$ ${amount.toFixed(2).replace('.', ',')}`],
+      ['Vigência', days === 1 ? '1 dia' : `${days} dias`],
+      ['Limite de sites', String(maxSites)],
+      ...features.slice(0, 4).map((f) => ['Inclui', f]),
+    ];
+    els.payOpDetails.innerHTML = rows
+      .map(
+        ([k, v]) =>
+          `<li><span>${escapeHtml(k)}</span><span>${escapeHtml(v)}</span></li>`
+      )
+      .join('');
+  }
+}
+
+function openPayDialog(plan) {
+  if (!els.pixDialog || !plan) return;
+  pendingPayPlan = plan;
+  fillPayOperation(plan);
   if (els.pixCopyCode) els.pixCopyCode.value = '';
   if (els.pixStatus) {
     els.pixStatus.hidden = true;
