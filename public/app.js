@@ -30,6 +30,10 @@ const els = {
   pixCopyCode: $('#pix-copy-code'),
   pixCopyBtn: $('#pix-copy-btn'),
   pixStatus: $('#pix-status'),
+  payPixPane: $('#pay-pix-pane'),
+  payCardPane: $('#pay-card-pane'),
+  cardPayStatus: $('#card-pay-status'),
+  cardBrickContainer: $('#cardPaymentBrick_container'),
   emailPlansDialog: $('#email-plans-dialog'),
   emailPlansClose: $('#email-plans-close'),
   emailPlansGo: $('#email-plans-go'),
@@ -1309,42 +1313,25 @@ function renderPlans(plans) {
       </ul>
       <p class="hint">${
         isActive
-          ? `Assinatura vigente${billing.expiresAt ? ` até ${formatDate(billing.expiresAt)}` : ''}. Novo Pix só após o vencimento.`
+          ? `Assinatura vigente${billing.expiresAt ? ` até ${formatDate(billing.expiresAt)}` : ''}. Novo pagamento só após o vencimento.`
           : `Trial: até ${cachedTrialMaxMonitors} sites. Planos pagos: até 100 sites.`
       }</p>
       <button type="button" class="btn primary" data-action="checkout" data-plan-id="${escapeHtml(p.id)}"${
         checkoutLocked ? ' disabled aria-disabled="true"' : ''
       }>
-        ${checkoutLocked ? 'Plano ativo' : 'Pagar com Pix'}
+        ${checkoutLocked ? 'Plano ativo' : 'Pagar'}
       </button>
     </article>`;
     })
     .join('');
 }
 
-async function refreshBilling() {
-  const data = await api('/billing/me');
-  if (data.billing && currentUser) {
-    currentUser = { ...currentUser, billing: data.billing };
-    syncEmailNotifyUi(currentUser);
-  }
-  if (data.trialMaxMonitors != null) {
-    cachedTrialMaxMonitors = Number(data.trialMaxMonitors) || 5;
-  }
-  renderPlans(data.plans || []);
-  if (els.billingFlash) {
-    // Clear stale redirect messages when subscription is already active.
-    if (data.billing?.entitled) {
-      els.billingFlash.hidden = true;
-      els.billingFlash.textContent = '';
-      if (location.hash.includes('status=')) {
-        history.replaceState(null, '', '#billing');
-      }
-    }
-  }
-}
-
 let pixPollTimer = null;
+let payMethod = 'pix';
+let pendingPayPlan = null;
+let cachedMpPublicKey = '';
+let cardBrickController = null;
+let mpSdkPromise = null;
 
 function stopPixPoll() {
   if (pixPollTimer) {
@@ -1353,45 +1340,146 @@ function stopPixPoll() {
   }
 }
 
+async function loadMercadoPagoSdk() {
+  if (window.MercadoPago) return window.MercadoPago;
+  if (mpSdkPromise) return mpSdkPromise;
+  mpSdkPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-mp-sdk]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(window.MercadoPago));
+      existing.addEventListener('error', () => reject(new Error('Falha ao carregar SDK Mercado Pago')));
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://sdk.mercadopago.com/js/v2';
+    script.async = true;
+    script.dataset.mpSdk = '1';
+    script.onload = () => resolve(window.MercadoPago);
+    script.onerror = () => reject(new Error('Falha ao carregar SDK Mercado Pago'));
+    document.head.appendChild(script);
+  });
+  return mpSdkPromise;
+}
+
+async function unmountCardBrick() {
+  try {
+    await cardBrickController?.unmount?.();
+  } catch {
+    /* ignore */
+  }
+  cardBrickController = null;
+  if (els.cardBrickContainer) els.cardBrickContainer.innerHTML = '';
+}
+
+function setPayMethod(method) {
+  payMethod = method === 'card' ? 'card' : 'pix';
+  document.querySelectorAll('.pay-method-tab').forEach((tab) => {
+    const on = tab.dataset.payMethod === payMethod;
+    tab.classList.toggle('is-active', on);
+    tab.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  if (els.payPixPane) els.payPixPane.hidden = payMethod !== 'pix';
+  if (els.payCardPane) els.payCardPane.hidden = payMethod !== 'card';
+  if (payMethod === 'card') {
+    stopPixPoll();
+    mountCardBrick().catch((err) => {
+      if (els.cardPayStatus) {
+        els.cardPayStatus.hidden = false;
+        els.cardPayStatus.textContent = err.message || 'Não foi possível abrir o formulário de cartão.';
+      }
+    });
+  }
+}
+
+async function mountCardBrick() {
+  if (!pendingPayPlan) throw new Error('Plano não selecionado.');
+  if (!cachedMpPublicKey) {
+    throw new Error('Public Key do Mercado Pago não configurada. Peça ao admin em Cobranças.');
+  }
+  if (els.cardPayStatus) {
+    els.cardPayStatus.hidden = true;
+    els.cardPayStatus.textContent = '';
+  }
+  await unmountCardBrick();
+  const MercadoPago = await loadMercadoPagoSdk();
+  const mp = new MercadoPago(cachedMpPublicKey, { locale: 'pt-BR' });
+  const amount = Number(pendingPayPlan.price) || 0;
+  cardBrickController = await mp.bricks().create('cardPayment', 'cardPaymentBrick_container', {
+    initialization: {
+      amount,
+      payer: {
+        email: currentUser?.email || '',
+      },
+    },
+    customization: {
+      visual: {
+        style: {
+          theme: 'dark',
+        },
+      },
+      paymentMethods: {
+        maxInstallments: 12,
+      },
+    },
+    callbacks: {
+      onReady: () => {},
+      onError: (error) => {
+        if (els.cardPayStatus) {
+          els.cardPayStatus.hidden = false;
+          els.cardPayStatus.textContent = error?.message || 'Erro no formulário de cartão.';
+        }
+      },
+      onSubmit: (cardFormData) =>
+        new Promise(async (resolve, reject) => {
+          try {
+            if (els.cardPayStatus) {
+              els.cardPayStatus.hidden = false;
+              els.cardPayStatus.textContent = 'Processando pagamento…';
+            }
+            const result = await api('/billing/checkout/card', {
+              method: 'POST',
+              body: JSON.stringify({
+                planId: pendingPayPlan.id,
+                cardFormData,
+              }),
+            });
+            if (result.approved || result.activated) {
+              if (els.cardPayStatus) els.cardPayStatus.textContent = 'Pagamento aprovado. Plano liberado.';
+              await refreshSessionUi();
+              await refreshBilling();
+              setTimeout(() => closePixDialog(), 1200);
+              resolve();
+              return;
+            }
+            if (els.cardPayStatus) {
+              els.cardPayStatus.textContent = `Status: ${result.status || 'pendente'}${
+                result.statusDetail ? ` (${result.statusDetail})` : ''
+              }. Aguardando confirmação…`;
+            }
+            if (result.payment?.id) startPaymentPoll(result.payment.id);
+            resolve();
+          } catch (err) {
+            if (els.cardPayStatus) {
+              els.cardPayStatus.hidden = false;
+              els.cardPayStatus.textContent = err.message || 'Falha no pagamento com cartão.';
+            }
+            reject();
+          }
+        }),
+    },
+  });
+}
+
 function closePixDialog() {
   stopPixPoll();
+  void unmountCardBrick();
+  pendingPayPlan = null;
   els.pixDialog?.close();
 }
 
-function openPixDialog(payload) {
-  if (!els.pixDialog) return;
-  const plan = payload.plan || {};
-  const amount = Number(plan.price || payload.payment?.amount || 0);
-  if (els.pixTitle) els.pixTitle.textContent = 'Pagar com Pix';
-  if (els.pixSummary) {
-    els.pixSummary.textContent = `R$ ${amount.toFixed(2).replace('.', ',')}`;
-  }
-  if (els.pixCopyCode) els.pixCopyCode.value = payload.qrCode || '';
-  if (els.pixStatus) {
-    els.pixStatus.hidden = true;
-    els.pixStatus.textContent = '';
-  }
-  if (els.pixWaiting) {
-    els.pixWaiting.hidden = false;
-    els.pixWaiting.textContent = 'Aguardando confirmação do pagamento…';
-  }
-
-  if (els.pixQrImg) {
-    if (payload.qrCodeBase64) {
-      els.pixQrImg.src = `data:image/png;base64,${payload.qrCodeBase64}`;
-      els.pixQrImg.hidden = false;
-    } else {
-      els.pixQrImg.hidden = true;
-      els.pixQrImg.removeAttribute('src');
-    }
-  }
-
-  if (!els.pixDialog.open) els.pixDialog.showModal();
-
+function startPaymentPoll(localId) {
   stopPixPoll();
-  const localId = payload.payment?.id;
   if (!localId) return;
-
   pixPollTimer = setInterval(async () => {
     try {
       const st = await api(`/billing/checkout/${localId}/status`);
@@ -1401,6 +1489,10 @@ function openPixDialog(payload) {
         if (els.pixStatus) {
           els.pixStatus.hidden = false;
           els.pixStatus.textContent = 'Plano liberado.';
+        }
+        if (els.cardPayStatus) {
+          els.cardPayStatus.hidden = false;
+          els.cardPayStatus.textContent = 'Pagamento confirmado. Plano liberado.';
         }
         await refreshSessionUi();
         await refreshBilling();
@@ -1415,39 +1507,128 @@ function openPixDialog(payload) {
   }, 3000);
 }
 
+function openPayDialog(plan) {
+  if (!els.pixDialog || !plan) return;
+  pendingPayPlan = plan;
+  const amount = Number(plan.price || 0);
+  if (els.pixTitle) els.pixTitle.textContent = `Pagar · ${plan.label || 'plano'}`;
+  if (els.pixSummary) {
+    els.pixSummary.textContent = `R$ ${amount.toFixed(2).replace('.', ',')}`;
+  }
+  if (els.pixCopyCode) els.pixCopyCode.value = '';
+  if (els.pixStatus) {
+    els.pixStatus.hidden = true;
+    els.pixStatus.textContent = '';
+  }
+  if (els.cardPayStatus) {
+    els.cardPayStatus.hidden = true;
+    els.cardPayStatus.textContent = '';
+  }
+  if (els.pixWaiting) {
+    els.pixWaiting.hidden = false;
+    els.pixWaiting.textContent = 'Escolha Pix ou Cartão para continuar.';
+  }
+  if (els.pixQrImg) {
+    els.pixQrImg.hidden = true;
+    els.pixQrImg.removeAttribute('src');
+  }
+  if (!els.pixDialog.open) els.pixDialog.showModal();
+  setPayMethod('pix');
+}
+
+function fillPixPane(payload) {
+  if (els.pixCopyCode) els.pixCopyCode.value = payload.qrCode || '';
+  if (els.pixWaiting) {
+    els.pixWaiting.hidden = false;
+    els.pixWaiting.textContent = 'Aguardando confirmação do pagamento…';
+  }
+  if (els.pixStatus) {
+    els.pixStatus.hidden = true;
+    els.pixStatus.textContent = '';
+  }
+  if (els.pixQrImg) {
+    if (payload.qrCodeBase64) {
+      els.pixQrImg.src = `data:image/png;base64,${payload.qrCodeBase64}`;
+      els.pixQrImg.hidden = false;
+    } else {
+      els.pixQrImg.hidden = true;
+      els.pixQrImg.removeAttribute('src');
+    }
+  }
+  startPaymentPoll(payload.payment?.id);
+}
+
+async function startPixCheckout(planId) {
+  const data = await api('/billing/checkout', {
+    method: 'POST',
+    body: JSON.stringify({ planId }),
+  });
+  if (!data.qrCode && !data.qrCodeBase64) {
+    throw new Error('Não foi possível gerar o QR Code Pix. Verifique o Mercado Pago.');
+  }
+  fillPixPane(data);
+  return data;
+}
+
+async function refreshBilling() {
+  const data = await api('/billing/me');
+  if (data.billing && currentUser) {
+    currentUser = { ...currentUser, billing: data.billing };
+    syncEmailNotifyUi(currentUser);
+  }
+  if (data.trialMaxMonitors != null) {
+    cachedTrialMaxMonitors = Number(data.trialMaxMonitors) || 5;
+  }
+  cachedMpPublicKey = data.mercadoPago?.publicKey || '';
+  renderPlans(data.plans || []);
+  if (els.billingFlash) {
+    // Clear stale redirect messages when subscription is already active.
+    if (data.billing?.entitled) {
+      els.billingFlash.hidden = true;
+      els.billingFlash.textContent = '';
+      if (location.hash.includes('status=')) {
+        history.replaceState(null, '', '#billing');
+      }
+    }
+  }
+}
+
 els.plansGrid?.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-action="checkout"]');
   if (!btn || btn.disabled) return;
   const planId = btn.dataset.planId;
+  const plan = cachedPlans.find((p) => p.id === planId);
   const billing = currentUser?.billing || {};
   const activePlanId =
     billing.entitled && (billing.status === 'active' || billing.source === 'paid')
       ? billing.planId || currentUser?.billingPlanId || null
       : null;
   if (activePlanId && planId === activePlanId) {
-    billingFlash('Este plano já está ativo. Novo Pix só após o vencimento.', true);
+    billingFlash('Este plano já está ativo. Novo pagamento só após o vencimento.', true);
     return;
   }
+  if (!plan) {
+    billingFlash('Plano não encontrado.', true);
+    return;
+  }
+  openPayDialog(plan);
   const prevLabel = btn.textContent;
   btn.disabled = true;
-  btn.textContent = 'Gerando Pix…';
+  btn.textContent = 'Abrindo…';
   try {
-    const data = await api('/billing/checkout', {
-      method: 'POST',
-      body: JSON.stringify({ planId }),
-    });
-    if (!data.qrCode && !data.qrCodeBase64) {
-      billingFlash('Não foi possível gerar o QR Code Pix. Verifique o Mercado Pago.', true);
-      return;
-    }
-    openPixDialog(data);
+    await startPixCheckout(planId);
   } catch (err) {
     billingFlash(err.message, true);
+    if (els.pixWaiting) els.pixWaiting.textContent = err.message;
   } finally {
     const stillActive = Boolean(activePlanId && planId === activePlanId);
     btn.disabled = stillActive;
-    btn.textContent = stillActive ? 'Plano ativo' : prevLabel || 'Pagar com Pix';
+    btn.textContent = stillActive ? 'Plano ativo' : prevLabel || 'Pagar';
   }
+});
+
+document.querySelectorAll('.pay-method-tab').forEach((tab) => {
+  tab.addEventListener('click', () => setPayMethod(tab.dataset.payMethod));
 });
 
 els.pixClose?.addEventListener('click', () => closePixDialog());
@@ -1459,10 +1640,16 @@ els.pixCopyBtn?.addEventListener('click', async () => {
   if (!code) return;
   try {
     await navigator.clipboard.writeText(code);
-    if (els.pixStatus) els.pixStatus.textContent = 'Código Pix copiado.';
+    if (els.pixStatus) {
+      els.pixStatus.hidden = false;
+      els.pixStatus.textContent = 'Código Pix copiado.';
+    }
   } catch {
     els.pixCopyCode?.select();
-    if (els.pixStatus) els.pixStatus.textContent = 'Selecione e copie o código manualmente.';
+    if (els.pixStatus) {
+      els.pixStatus.hidden = false;
+      els.pixStatus.textContent = 'Selecione e copie o código manualmente.';
+    }
   }
 });
 
@@ -1608,7 +1795,7 @@ function renderBillingPayments(payments) {
       (p) => `
     <article class="card payment-card">
       <strong title="${escapeHtml(p.planId || 'plano')}">${escapeHtml(p.planId || 'plano')}</strong>
-      <p class="meta">R$ ${Number(p.amount).toFixed(2)} · ${escapeHtml(p.status)} · ${formatDate(p.createdAt)}</p>
+      <p class="meta">${escapeHtml(p.method === 'card' ? 'Cartão' : 'Pix')} · R$ ${Number(p.amount).toFixed(2)} · ${escapeHtml(p.status)} · ${formatDate(p.createdAt)}</p>
       <p class="meta" title="user: ${escapeHtml(p.userId)}${
         p.mpPaymentId ? ` · MP ${escapeHtml(String(p.mpPaymentId))}` : ''
       }">user: ${escapeHtml(String(p.userId || '').slice(0, 8))}…${

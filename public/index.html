@@ -147,7 +147,7 @@
           <div class="panel billing-panel">
             <p class="lead">
               Escolha um plano para liberar notificações por e-mail e ampliar o limite de sites.
-              Contas novas têm período trial com limite de sites.
+              Pague com <strong>Pix</strong> ou <strong>cartão</strong> na própria página.
             </p>
             <p id="billing-status" class="hint"></p>
             <p id="billing-flash" class="hint" hidden></p>
@@ -174,7 +174,7 @@
             <div class="billing-admin-grid">
               <form id="mp-config-form" class="card billing-card">
                 <h2>Mercado Pago</h2>
-                <p class="hint">Cole Access Token, Public Key e Assinatura secreta do webhook.</p>
+                <p class="hint">Cole Access Token, Public Key e Assinatura secreta do webhook. A Public Key é necessária para pagamento com cartão na página.</p>
                 <label>
                   Access Token (API)
                   <input id="mp-access-token" type="password" autocomplete="off" placeholder="APP_USR-..." />
@@ -288,19 +288,39 @@
       </div>
     </dialog>
 
-    <dialog id="pix-dialog" class="pix-dialog">
-      <div class="pix-body">
+    <dialog id="pix-dialog" class="pix-dialog pay-dialog">
+      <div class="pix-body pay-body">
         <button type="button" id="pix-close" class="pix-close" aria-label="Fechar">×</button>
-        <h3 id="pix-title">Pagar com Pix</h3>
+        <h3 id="pix-title">Pagar plano</h3>
         <p id="pix-summary" class="pix-amount"></p>
-        <img id="pix-qr-img" class="pix-qr" alt="QR Code Pix" hidden />
-        <label class="pix-copy-label">
-          Pix copia e cola
-          <textarea id="pix-copy-code" rows="2" readonly></textarea>
-        </label>
-        <button type="button" id="pix-copy-btn" class="btn primary pix-copy-btn">Copiar código</button>
-        <p id="pix-waiting" class="pix-waiting">Aguardando confirmação do pagamento…</p>
-        <p id="pix-status" class="pix-status" hidden></p>
+
+        <div class="pay-method-tabs" role="tablist" aria-label="Forma de pagamento">
+          <button type="button" class="pay-method-tab is-active" data-pay-method="pix" role="tab" aria-selected="true">
+            Pix
+          </button>
+          <button type="button" class="pay-method-tab" data-pay-method="card" role="tab" aria-selected="false">
+            Cartão
+          </button>
+        </div>
+
+        <div id="pay-pix-pane" class="pay-pane">
+          <img id="pix-qr-img" class="pix-qr" alt="QR Code Pix" hidden />
+          <label class="pix-copy-label">
+            Pix copia e cola
+            <textarea id="pix-copy-code" rows="2" readonly></textarea>
+          </label>
+          <button type="button" id="pix-copy-btn" class="btn primary pix-copy-btn">Copiar código</button>
+          <p id="pix-waiting" class="pix-waiting">Aguardando confirmação do pagamento…</p>
+          <p id="pix-status" class="pix-status" hidden></p>
+        </div>
+
+        <div id="pay-card-pane" class="pay-pane" hidden>
+          <p id="card-pay-hint" class="hint">
+            Preencha os dados do cartão de crédito ou débito. O pagamento é processado pelo Mercado Pago.
+          </p>
+          <div id="cardPaymentBrick_container" class="card-brick"></div>
+          <p id="card-pay-status" class="pix-status" hidden></p>
+        </div>
       </div>
     </dialog>
 

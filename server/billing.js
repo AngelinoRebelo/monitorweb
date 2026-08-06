@@ -460,14 +460,7 @@ async function mpFetch(pathname, { method = 'GET', body, accessToken, headers = 
 }
 
 /** Create in-page Pix checkout (QR) instead of redirecting to Checkout Pro. */
-export async function createCheckoutForUser({ user, planId, req }) {
-  const cfg = getBillingConfig();
-  const plan = (cfg.plans || []).find((p) => p.id === planId && p.active !== false);
-  if (!plan) throw new Error('Plano inválido ou inativo.');
-  if (!cfg.mercadoPago.accessToken) {
-    throw new Error('Mercado Pago sem access token. Configure em Cobranças.');
-  }
-
+function assertPlanCheckoutAllowed(user, plan) {
   const state = getBillingState(user);
   if (
     state.entitled &&
@@ -477,17 +470,32 @@ export async function createCheckoutForUser({ user, planId, req }) {
     Date.parse(state.expiresAt) > Date.now()
   ) {
     throw new Error(
-      'Este plano já está ativo. Novo Pix só fica disponível após o vencimento da assinatura.'
+      'Este plano já está ativo. Novo pagamento só fica disponível após o vencimento da assinatura.'
     );
   }
   if (state.entitled && state.permanent && state.planId === plan.id) {
     throw new Error('Este plano já está ativo de forma permanente.');
   }
+}
+
+function resolveCheckoutPlan(planId) {
+  const cfg = getBillingConfig();
+  const plan = (cfg.plans || []).find((p) => p.id === planId && p.active !== false);
+  if (!plan) throw new Error('Plano inválido ou inativo.');
+  if (!cfg.mercadoPago.accessToken) {
+    throw new Error('Mercado Pago sem access token. Configure em Cobranças.');
+  }
+  const amount = Number(plan.price);
+  if (!(amount > 0)) throw new Error('Valor do plano inválido.');
+  return { cfg, plan, amount };
+}
+
+export async function createCheckoutForUser({ user, planId, req }) {
+  const { plan, amount } = resolveCheckoutPlan(planId);
+  assertPlanCheckoutAllowed(user, plan);
 
   const paymentId = randomUUID();
   const base = appBaseUrl(req);
-  const amount = Number(plan.price);
-  if (!(amount > 0)) throw new Error('Valor do plano inválido.');
 
   const mpPayment = await mpFetch('/v1/payments', {
     method: 'POST',
@@ -505,6 +513,7 @@ export async function createCheckoutForUser({ user, planId, req }) {
         user_id: user.id,
         plan_id: plan.id,
         payment_id: paymentId,
+        method: 'pix',
       },
     },
   });
@@ -517,6 +526,7 @@ export async function createCheckoutForUser({ user, planId, req }) {
     amount,
     days: Number(plan.days),
     maxMonitors: Number(plan.maxMonitors) || PAID_DEFAULT_MAX_MONITORS,
+    method: 'pix',
     status: mpPayment.status === 'approved' ? 'approved' : 'pending',
     mpPreferenceId: null,
     mpPaymentId: mpPayment.id != null ? String(mpPayment.id) : null,
@@ -536,6 +546,7 @@ export async function createCheckoutForUser({ user, planId, req }) {
       amount: record.amount,
       days: record.days,
       status: record.status,
+      method: 'pix',
       mpPaymentId: record.mpPaymentId,
       createdAt: record.createdAt,
     },
@@ -552,6 +563,103 @@ export async function createCheckoutForUser({ user, planId, req }) {
     qrCode: tx.qr_code || null,
     qrCodeBase64: tx.qr_code_base64 || null,
     ticketUrl: tx.ticket_url || null,
+  };
+}
+
+/** Create in-page credit/debit card payment from Card Payment Brick token. */
+export async function createCardPaymentForUser({ user, planId, cardFormData, req }) {
+  const { plan, amount } = resolveCheckoutPlan(planId);
+  assertPlanCheckoutAllowed(user, plan);
+
+  const token = String(cardFormData?.token || '').trim();
+  const paymentMethodId = String(cardFormData?.payment_method_id || '').trim();
+  const installments = Math.max(1, Number(cardFormData?.installments) || 1);
+  if (!token) throw new Error('Token do cartão ausente.');
+  if (!paymentMethodId) throw new Error('Método de pagamento do cartão ausente.');
+
+  const paymentId = randomUUID();
+  const base = appBaseUrl(req);
+  const identification = cardFormData?.payer?.identification || {};
+  const body = {
+    transaction_amount: amount,
+    token,
+    description: `MonitorWeb — ${plan.label}`,
+    installments,
+    payment_method_id: paymentMethodId,
+    payer: {
+      email: user.email,
+      ...(identification?.type && identification?.number
+        ? {
+            identification: {
+              type: String(identification.type),
+              number: String(identification.number),
+            },
+          }
+        : {}),
+    },
+    external_reference: paymentId,
+    notification_url: `${base}/api/billing/webhook`,
+    metadata: {
+      user_id: user.id,
+      plan_id: plan.id,
+      payment_id: paymentId,
+      method: 'card',
+    },
+  };
+  if (cardFormData?.issuer_id != null && String(cardFormData.issuer_id).trim() !== '') {
+    body.issuer_id = Number(cardFormData.issuer_id);
+  }
+
+  const mpPayment = await mpFetch('/v1/payments', {
+    method: 'POST',
+    headers: { 'X-Idempotency-Key': paymentId },
+    body,
+  });
+
+  const record = {
+    id: paymentId,
+    userId: user.id,
+    planId: plan.id,
+    amount,
+    days: Number(plan.days),
+    maxMonitors: Number(plan.maxMonitors) || PAID_DEFAULT_MAX_MONITORS,
+    method: 'card',
+    status: mpPayment.status === 'approved' ? 'approved' : mpPayment.status || 'pending',
+    mpPreferenceId: null,
+    mpPaymentId: mpPayment.id != null ? String(mpPayment.id) : null,
+    initPoint: null,
+    qrCode: null,
+    createdAt: new Date().toISOString(),
+    paidAt: mpPayment.status === 'approved' ? new Date().toISOString() : null,
+    statusDetail: mpPayment.status_detail || null,
+  };
+  const list = readPayments();
+  list.push(record);
+  writePayments(list);
+
+  return {
+    payment: {
+      id: record.id,
+      planId: record.planId,
+      amount: record.amount,
+      days: record.days,
+      status: record.status,
+      method: 'card',
+      mpPaymentId: record.mpPaymentId,
+      createdAt: record.createdAt,
+    },
+    plan: {
+      id: plan.id,
+      label: plan.label,
+      days: plan.days,
+      price: plan.price,
+      maxMonitors: plan.maxMonitors,
+      features: plan.features,
+    },
+    mpPaymentId: record.mpPaymentId,
+    status: mpPayment.status,
+    statusDetail: mpPayment.status_detail || null,
+    approved: mpPayment.status === 'approved',
   };
 }
 
@@ -871,6 +979,29 @@ billingRouter.post('/checkout', async (req, res) => {
     res.status(201).json(result);
   } catch (err) {
     res.status(400).json({ error: err?.message || 'Falha ao criar pagamento' });
+  }
+});
+
+billingRouter.post('/checkout/card', async (req, res) => {
+  try {
+    const auth = await import('./auth.js');
+    const notify = await import('./notify.js');
+    const user = auth.findUserByIdPublic(req.user.id);
+    if (!user) return res.status(401).json({ error: 'Não autenticado' });
+    const planId = String(req.body?.planId || '');
+    const cardFormData = req.body?.cardFormData || req.body || {};
+    const result = await createCardPaymentForUser({ user, planId, cardFormData, req });
+    if (result.approved && result.mpPaymentId) {
+      const applied = await applyApprovedMpPayment(await fetchMpPayment(result.mpPaymentId), {
+        updateUser: (id, patch) => auth.updateUserRecordPublic(id, patch),
+        findUser: (id) => auth.findUserByIdPublic(id),
+        notifyAccount: (u) => notify.notifyAccount(u),
+      });
+      return res.status(201).json({ ...result, ...applied, activated: true });
+    }
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(400).json({ error: err?.message || 'Falha ao pagar com cartão' });
   }
 });
 

@@ -666,6 +666,52 @@ body {
   color: var(--muted);
 }
 
+.pay-dialog .pix-body {
+  width: min(440px, 92vw);
+}
+
+.pay-method-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  padding: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
+  margin: 0.15rem 0 0.85rem;
+}
+
+.pay-method-tab {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 700;
+  padding: 0.55rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.pay-method-tab.is-active {
+  color: var(--accent-ink);
+  background: linear-gradient(135deg, #d4a24c, #b8863a);
+}
+
+.pay-pane {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.card-brick {
+  min-height: 220px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+#card-pay-hint {
+  margin: 0;
+  text-align: left;
+}
 
 .brand {
   display: flex;
