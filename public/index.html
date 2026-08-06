@@ -112,14 +112,38 @@
               <div class="settings">
                 <h2>Alertas</h2>
                 <div class="notify-actions">
-                  <button type="button" id="btn-browser-notify" class="btn notify-btn is-on" data-notify="browser">
-                    Alertas no navegador / PWA
+                  <button
+                    type="button"
+                    id="btn-browser-notify"
+                    class="notify-switch is-on"
+                    role="switch"
+                    aria-checked="true"
+                    data-notify="browser"
+                  >
+                    <span class="notify-switch-label">Alertas no navegador / PWA</span>
+                    <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
                   </button>
-                  <button type="button" id="btn-desktop-notify" class="btn notify-btn is-on" data-notify="desktop">
-                    Alertas do sistema (local)
+                  <button
+                    type="button"
+                    id="btn-desktop-notify"
+                    class="notify-switch is-on"
+                    role="switch"
+                    aria-checked="true"
+                    data-notify="desktop"
+                  >
+                    <span class="notify-switch-label">Alertas do sistema (local)</span>
+                    <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
                   </button>
-                  <button type="button" id="btn-email-notify" class="btn notify-btn is-locked" data-notify="email">
-                    Alertas por e-mail
+                  <button
+                    type="button"
+                    id="btn-email-notify"
+                    class="notify-switch is-locked"
+                    role="switch"
+                    aria-checked="false"
+                    data-notify="email"
+                  >
+                    <span class="notify-switch-label">Alertas por e-mail</span>
+                    <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
                   </button>
                 </div>
                 <div id="email-notify-box" class="email-notify-box">

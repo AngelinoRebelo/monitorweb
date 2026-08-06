@@ -257,29 +257,32 @@ function syncEmailNotifyUi(user) {
     els.btnEmailNotify.classList.toggle('is-locked', !emailOk);
     els.btnEmailNotify.classList.toggle('is-on', emailOn);
     els.btnEmailNotify.classList.toggle('is-off', emailOk && !emailOn);
+    els.btnEmailNotify.setAttribute('aria-checked', emailOn ? 'true' : 'false');
   }
 
   if (els.btnBrowserNotify) {
     els.btnBrowserNotify.classList.toggle('is-on', browserNotifyEnabled);
     els.btnBrowserNotify.classList.toggle('is-off', !browserNotifyEnabled);
+    els.btnBrowserNotify.setAttribute('aria-checked', browserNotifyEnabled ? 'true' : 'false');
   }
   if (els.btnDesktopNotify) {
     els.btnDesktopNotify.classList.toggle('is-on', desktopNotifyEnabled);
     els.btnDesktopNotify.classList.toggle('is-off', !desktopNotifyEnabled);
+    els.btnDesktopNotify.setAttribute('aria-checked', desktopNotifyEnabled ? 'true' : 'false');
   }
 
   if (els.emailNotifyStatus) {
     if (!emailOk) {
       els.emailNotifyStatus.textContent =
         billing.status === 'trial'
-          ? `Trial ativo até ${formatDate(billing.expiresAt)}. E-mail só em planos pagos — clique para ver os planos.`
-          : 'Somente planos pagos enviam alertas por e-mail. Clique para escolher um plano.';
+          ? `Trial ativo até ${formatDate(billing.expiresAt)}. E-mail só em planos pagos — toque na chave para ver os planos.`
+          : 'Somente planos pagos enviam alertas por e-mail. Toque na chave para escolher um plano.';
       els.emailNotifyStatus.classList.add('warn-text');
     } else {
       els.emailNotifyStatus.textContent = `Plano ativo${
         billing.expiresAt ? ` até ${formatDate(billing.expiresAt)}` : ''
       } · Limite hoje: ${sentToday}/${dailyLimit}${
-        emailOn ? ' · e-mail ligado' : ' · clique para ativar e-mail'
+        emailOn ? ' · e-mail ligado' : ' · ative a chave para receber e-mail'
       }`;
       els.emailNotifyStatus.classList.remove('warn-text');
     }

@@ -241,31 +241,80 @@ body {
   gap: 0.55rem;
 }
 
-.notify-btn {
+.notify-switch {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  text-align: left;
+  justify-content: space-between;
+  gap: 0.85rem;
   width: 100%;
-  position: relative;
-  white-space: normal;
-  line-height: 1.25;
-  gap: 0.45rem;
-}
-
-.notify-btn.is-on {
-  border-color: rgba(93, 202, 160, 0.45);
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.18);
   color: var(--ink);
-  background: rgba(93, 202, 160, 0.1);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    opacity 0.2s ease;
 }
 
-.notify-btn.is-off {
-  opacity: 0.75;
+.notify-switch-label {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.3;
 }
 
-.notify-btn.is-locked {
-  filter: blur(0.2px);
-  opacity: 0.55;
+.switch-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.7rem;
+  height: 1.45rem;
+  border-radius: 999px;
+  background: rgba(232, 243, 236, 0.18);
+  border: 1px solid rgba(232, 243, 236, 0.16);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0.16rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  background: #d7e4dc;
+  transform: translateY(-50%);
+  transition: transform 0.2s ease, background 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.notify-switch.is-on {
+  border-color: rgba(93, 202, 160, 0.4);
+  background: rgba(93, 202, 160, 0.08);
+}
+
+.notify-switch.is-on .switch-track {
+  background: linear-gradient(135deg, #5dcaa0, #3ea87f);
+  border-color: transparent;
+}
+
+.notify-switch.is-on .switch-thumb {
+  transform: translate(1.2rem, -50%);
+  background: #f4fff9;
+}
+
+.notify-switch.is-off {
+  opacity: 0.92;
+}
+
+.notify-switch.is-locked {
+  opacity: 0.62;
+  border-style: dashed;
   background: repeating-linear-gradient(
     -45deg,
     rgba(0, 0, 0, 0.22),
@@ -273,17 +322,20 @@ body {
     rgba(255, 255, 255, 0.03) 6px,
     rgba(255, 255, 255, 0.03) 12px
   );
-  border-style: dashed;
 }
 
-.notify-btn.is-locked::after {
-  content: 'bloqueado';
-  flex: 0 0 auto;
-  margin-left: auto;
-  font-size: 0.7rem;
-  color: var(--muted);
-  letter-spacing: 0.02em;
-  white-space: nowrap;
+.notify-switch.is-locked .switch-track {
+  opacity: 0.7;
+}
+
+.notify-switch:focus-visible {
+  outline: 2px solid rgba(212, 162, 76, 0.7);
+  outline-offset: 2px;
+}
+
+/* legacy class kept for safety if any old markup remains */
+.notify-btn {
+  display: none;
 }
 
 .plans-grid {
