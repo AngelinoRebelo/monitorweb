@@ -25,6 +25,67 @@ export function mailProvider() {
   return null;
 }
 
+export function appBaseUrl(req) {
+  const envUrl = (process.env.APP_BASE_URL || '').replace(/\/$/, '');
+  if (envUrl) return envUrl;
+  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+    return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+  }
+  if (req) {
+    return `${req.protocol}://${req.get('host')}`;
+  }
+  return 'https://monitorweb-production.up.railway.app';
+}
+
+/** PNG logo for email clients (SVG is poorly supported in Gmail/Outlook). */
+export function emailLogoUrl(req) {
+  return `${appBaseUrl(req)}/icon.png`;
+}
+
+function wrapEmailHtml(html, req) {
+  const body = String(html || '').trim();
+  if (!body) return body;
+  if (body.includes('data-mw-email-shell')) return body;
+
+  const logo = emailLogoUrl(req);
+  const home = appBaseUrl(req);
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<body style="margin:0;padding:0;background:#0b1c16">
+  <div data-mw-email-shell style="margin:0;padding:24px 12px;background:#0b1c16">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;margin:0 auto;border-collapse:collapse">
+      <tr>
+        <td style="background:#10271e;border:1px solid #2a453a;border-radius:16px;overflow:hidden">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
+            <tr>
+              <td style="padding:18px 22px;border-bottom:1px solid #2a453a;background:#0f2f24">
+                <a href="${home}" style="text-decoration:none;color:#e8f3ec">
+                  <img src="${logo}" width="48" height="48" alt="MonitorWeb" style="display:inline-block;vertical-align:middle;border:0;border-radius:12px;outline:none" />
+                  <span style="display:inline-block;vertical-align:middle;margin-left:12px;font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:700;letter-spacing:-0.02em;color:#e8f3ec">MonitorWeb</span>
+                </a>
+                <div style="margin-top:6px;margin-left:60px;font-family:Arial,sans-serif;font-size:12px;color:#9bb5a8">vigilância · alertas</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:22px;background:#f7faf8;font-family:Arial,sans-serif;line-height:1.5;color:#123126">
+                ${body}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:14px 22px;background:#0f2f24;border-top:1px solid #2a453a;font-family:Arial,sans-serif;font-size:12px;color:#9bb5a8">
+                Enviado por <a href="${home}" style="color:#d4a24c;text-decoration:none">MonitorWeb</a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>`;
+}
+
 async function sendWithResend({ to, subject, html, text }) {
   const res = await undiciFetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -84,27 +145,16 @@ async function sendWithBrevo({ to, subject, html, text }) {
 
 export async function sendMail({ to, subject, html, text }) {
   if (!to) throw new Error('Destinatário ausente');
+  const brandedHtml = wrapEmailHtml(html);
   if (process.env.RESEND_API_KEY && mailFrom()) {
-    return sendWithResend({ to, subject, html, text });
+    return sendWithResend({ to, subject, html: brandedHtml, text });
   }
   if (process.env.BREVO_API_KEY && mailFrom()) {
-    return sendWithBrevo({ to, subject, html, text });
+    return sendWithBrevo({ to, subject, html: brandedHtml, text });
   }
   throw new Error(
     'E-mail não configurado. Defina RESEND_API_KEY (ou BREVO_API_KEY) e MAIL_FROM no Railway.'
   );
-}
-
-export function appBaseUrl(req) {
-  const envUrl = (process.env.APP_BASE_URL || '').replace(/\/$/, '');
-  if (envUrl) return envUrl;
-  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
-    return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
-  }
-  if (req) {
-    return `${req.protocol}://${req.get('host')}`;
-  }
-  return 'https://monitorweb-production.up.railway.app';
 }
 
 export async function sendPasswordResetEmail({ to, resetUrl, expiresAt }) {
