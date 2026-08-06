@@ -5,7 +5,10 @@
     <meta name="google" content="notranslate" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0f2f24" />
-    <meta name="description" content="Entrar no MonitorWeb" />
+    <meta
+      name="description"
+      content="MonitorWeb — vigilância contínua de páginas, alertas em tempo real e planos com Pix."
+    />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <title>Entrar · MonitorWeb</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -17,20 +20,98 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body class="auth-page">
-    <div class="bg" aria-hidden="true"></div>
-    <main class="auth-shell">
+    <div class="bg auth-bg" aria-hidden="true"></div>
+    <div class="auth-gridlines" aria-hidden="true"></div>
+    <div class="auth-orb auth-orb-a" aria-hidden="true"></div>
+    <div class="auth-orb auth-orb-b" aria-hidden="true"></div>
+
+    <main class="auth-stage">
+      <section class="auth-showcase" aria-label="Funcionalidades do MonitorWeb">
+        <header class="showcase-brand">
+          <span class="mark mark-img" aria-hidden="true">
+            <img src="/icon.svg" alt="" width="48" height="48" />
+          </span>
+          <div>
+            <p class="brand-name">MonitorWeb</p>
+            <p class="brand-sub">vigilância · alertas</p>
+          </div>
+        </header>
+
+        <h1 class="showcase-title">
+          Seu site sob
+          <span class="showcase-title-accent">vigilância contínua</span>
+        </h1>
+        <p class="showcase-lead">
+          Detecte mudanças no instante, escolha a área exata da página e receba alertas onde você
+          estiver.
+        </p>
+
+        <div class="radar-stage" data-feature-visual="watch" aria-hidden="true">
+          <div class="radar-core">
+            <span class="radar-ring r1"></span>
+            <span class="radar-ring r2"></span>
+            <span class="radar-ring r3"></span>
+            <span class="radar-sweep"></span>
+            <span class="radar-beam"></span>
+            <span class="radar-hub">
+              <img src="/icon.svg" alt="" width="36" height="36" />
+            </span>
+            <span class="radar-blip b1"></span>
+            <span class="radar-blip b2"></span>
+            <span class="radar-blip b3"></span>
+          </div>
+          <p class="radar-status">
+            <span class="radar-pulse"></span>
+            <span id="radar-status-text">monitorando em tempo real</span>
+          </p>
+        </div>
+
+        <div class="feature-rail" role="tablist" aria-label="Recursos">
+          <button
+            type="button"
+            class="feature-chip is-active"
+            role="tab"
+            aria-selected="true"
+            data-feature="watch"
+          >
+            <span class="feature-chip-label">Vigilância 24/7</span>
+            <span class="feature-chip-hint">Checagens automáticas por intervalo</span>
+          </button>
+          <button type="button" class="feature-chip" role="tab" aria-selected="false" data-feature="region">
+            <span class="feature-chip-label">Área exata</span>
+            <span class="feature-chip-hint">Selecione só a parte que importa</span>
+          </button>
+          <button type="button" class="feature-chip" role="tab" aria-selected="false" data-feature="alerts">
+            <span class="feature-chip-label">Alertas multi-canal</span>
+            <span class="feature-chip-hint">Navegador, sistema e e-mail</span>
+          </button>
+          <button type="button" class="feature-chip" role="tab" aria-selected="false" data-feature="plans">
+            <span class="feature-chip-label">Planos com Pix</span>
+            <span class="feature-chip-hint">Ative em minutos, sem fricção</span>
+          </button>
+        </div>
+
+        <article class="feature-panel" id="feature-panel" aria-live="polite">
+          <h2 id="feature-panel-title">Vigilância 24/7</h2>
+          <p id="feature-panel-copy">
+            O MonitorWeb verifica suas URLs no ritmo que você definir e registra cada alteração com
+            histórico legível — inclusive páginas dinâmicas e fontes SEI.
+          </p>
+        </article>
+      </section>
+
       <section class="auth-card panel">
-        <div class="brand auth-brand">
+        <div class="brand auth-brand auth-brand-compact">
           <span class="mark mark-img" aria-hidden="true">
             <img src="/icon.svg" alt="" width="40" height="40" />
           </span>
           <div>
-            <p class="brand-name">MonitorWeb</p>
-            <p class="brand-sub">acesso protegido</p>
+            <p class="brand-name">Acesso</p>
+            <p class="brand-sub">painel seguro</p>
           </div>
         </div>
 
-        <h1 id="auth-title">Entrar</h1>
+        <h2 id="auth-title">Entrar</h2>
         <p class="lead" id="auth-lead">Use seu e-mail e senha para acessar o painel.</p>
 
         <div class="auth-tabs" role="tablist">
@@ -62,7 +143,7 @@
               placeholder="mínimo 8 caracteres"
             />
           </label>
-  <p id="auth-error" class="auth-error" hidden></p>
+          <p id="auth-error" class="auth-error" hidden></p>
           <p id="auth-ok" class="hint" hidden></p>
           <div id="auth-paywall" class="auth-paywall" hidden>
             <p id="auth-paywall-msg" class="auth-error">
@@ -83,6 +164,7 @@
         </p>
       </section>
     </main>
+
     <script src="/login.js" type="module"></script>
   </body>
 </html>

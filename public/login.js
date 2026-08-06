@@ -16,7 +16,111 @@ const els = {
   registerHint: $('#register-hint'),
   forgotHint: $('#forgot-hint'),
   tabs: document.querySelectorAll('.auth-tab'),
+  featureChips: document.querySelectorAll('[data-feature]'),
+  featurePanel: $('#feature-panel'),
+  featureTitle: $('#feature-panel-title'),
+  featureCopy: $('#feature-panel-copy'),
+  radarStage: $('.radar-stage'),
+  radarStatus: $('#radar-status-text'),
 };
+
+const FEATURES = {
+  watch: {
+    title: 'Vigilância 24/7',
+    copy:
+      'O MonitorWeb verifica suas URLs no ritmo que você definir e registra cada alteração com histórico legível — inclusive páginas dinâmicas e fontes SEI.',
+    status: 'monitorando em tempo real',
+  },
+  region: {
+    title: 'Área exata da página',
+    copy:
+      'Abra a prévia, clique na região que importa e monitore só aquele trecho. Menos ruído, alertas mais precisos.',
+    status: 'mira ativa na região selecionada',
+  },
+  alerts: {
+    title: 'Alertas multi-canal',
+    copy:
+      'Receba avisos no navegador/PWA, no sistema local e por e-mail nos planos pagos — com a marca MonitorWeb em cada mensagem.',
+    status: 'canais de alerta sincronizados',
+  },
+  plans: {
+    title: 'Planos com Pix',
+    copy:
+      'Comece no trial, evolua quando precisar e libere mais sites e e-mail com pagamento Pix em minutos.',
+    status: 'ativação imediata via Pix',
+  },
+};
+
+const FEATURE_ORDER = ['watch', 'region', 'alerts', 'plans'];
+let activeFeature = 'watch';
+let featureTimer = null;
+let featurePaused = false;
+
+function setFeature(id, { fromUser = false } = {}) {
+  if (!FEATURES[id]) return;
+  activeFeature = id;
+  if (fromUser) {
+    featurePaused = true;
+    restartFeatureRotation(9000);
+  }
+
+  els.featureChips.forEach((chip) => {
+    const on = chip.dataset.feature === id;
+    chip.classList.toggle('is-active', on);
+    chip.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+
+  if (els.radarStage) els.radarStage.dataset.featureVisual = id;
+  if (els.radarStatus) els.radarStatus.textContent = FEATURES[id].status;
+
+  if (els.featurePanel) {
+    els.featurePanel.classList.remove('is-switching');
+    void els.featurePanel.offsetWidth;
+    els.featurePanel.classList.add('is-switching');
+  }
+  if (els.featureTitle) els.featureTitle.textContent = FEATURES[id].title;
+  if (els.featureCopy) els.featureCopy.textContent = FEATURES[id].copy;
+}
+
+function restartFeatureRotation(delayMs = 5200) {
+  clearInterval(featureTimer);
+  featureTimer = setInterval(() => {
+    if (featurePaused) {
+      featurePaused = false;
+      return;
+    }
+    if (document.hidden) return;
+    const idx = FEATURE_ORDER.indexOf(activeFeature);
+    const next = FEATURE_ORDER[(idx + 1) % FEATURE_ORDER.length];
+    setFeature(next);
+  }, delayMs);
+}
+
+els.featureChips.forEach((chip) => {
+  chip.addEventListener('click', () => setFeature(chip.dataset.feature, { fromUser: true }));
+  chip.addEventListener('mouseenter', () => {
+    if (window.matchMedia('(hover: hover)').matches) {
+      setFeature(chip.dataset.feature, { fromUser: true });
+    }
+  });
+});
+
+if (els.featureChips.length) {
+  setFeature('watch');
+  restartFeatureRotation();
+}
+
+// Subtle pointer parallax on showcase atmosphere.
+const stage = $('.auth-stage');
+if (stage && window.matchMedia('(pointer: fine)').matches) {
+  stage.addEventListener('pointermove', (e) => {
+    const rect = stage.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    document.documentElement.style.setProperty('--auth-px', `${(x * 12).toFixed(2)}px`);
+    document.documentElement.style.setProperty('--auth-py', `${(y * 10).toFixed(2)}px`);
+  });
+}
 
 let mode = 'login';
 let registrationOpen = false;
