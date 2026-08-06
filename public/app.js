@@ -55,6 +55,17 @@ const els = {
   diffSummary: $('#diff-summary'),
   diffView: $('#diff-view'),
   diffClose: $('#diff-close'),
+  pickerDialog: $('#picker-dialog'),
+  pickerClose: $('#picker-close'),
+  pickerFrame: $('#picker-frame'),
+  pickerLoading: $('#picker-loading'),
+  pickerSelector: $('#picker-selector'),
+  pickerSample: $('#picker-sample'),
+  pickerApply: $('#picker-apply'),
+  pickerReload: $('#picker-reload'),
+  btnPickRegion: $('#btn-pick-region'),
+  btnClearSelector: $('#btn-clear-selector'),
+  selectorHint: $('#selector-hint'),
   viewTitle: $('#view-title'),
   dashStats: $('#dash-stats'),
   dashFeed: $('#dash-feed'),
@@ -865,6 +876,7 @@ els.form?.addEventListener('submit', async (e) => {
     els.form.reset();
     $('#intervalMinutes').value = '5';
     $('#enabled').checked = true;
+    updateSelectorHint('');
     try {
       const me = await api('/auth/me');
       if (els.quotaHint && me.quota) {
@@ -879,6 +891,111 @@ els.form?.addEventListener('submit', async (e) => {
   } catch (err) {
     alert(err.message);
   }
+});
+
+let pickerSelected = null;
+
+function updateSelectorHint(selector) {
+  if (!els.selectorHint) return;
+  if (selector) {
+    els.selectorHint.textContent = `Monitorando só: ${selector}`;
+  } else {
+    els.selectorHint.textContent =
+      'Sem seletor, monitora a página toda (no SEI, andamentos/protocolos).';
+  }
+}
+
+function resetPickerUi() {
+  pickerSelected = null;
+  if (els.pickerSelector) els.pickerSelector.textContent = 'Nenhuma área selecionada';
+  if (els.pickerSample) els.pickerSample.textContent = '';
+  if (els.pickerApply) els.pickerApply.disabled = true;
+}
+
+function loadPickerFrame(url) {
+  if (!els.pickerFrame) return;
+  resetPickerUi();
+  if (els.pickerLoading) els.pickerLoading.hidden = false;
+  const src = `/api/preview/frame?url=${encodeURIComponent(url)}&t=${Date.now()}`;
+  els.pickerFrame.onload = () => {
+    if (els.pickerLoading) els.pickerLoading.hidden = true;
+  };
+  els.pickerFrame.src = src;
+}
+
+function openRegionPicker() {
+  const url = $('#url')?.value.trim();
+  if (!url) {
+    alert('Informe a URL do site antes de selecionar a área.');
+    $('#url')?.focus();
+    return;
+  }
+  try {
+    const parsed = new URL(url);
+    if (!/^https?:$/.test(parsed.protocol)) throw new Error('bad');
+  } catch {
+    alert('URL inválida. Use http:// ou https://');
+    return;
+  }
+  if (!els.pickerDialog) return;
+  loadPickerFrame(url);
+  els.pickerDialog.showModal();
+}
+
+function closeRegionPicker() {
+  els.pickerDialog?.close();
+  if (els.pickerFrame) els.pickerFrame.src = 'about:blank';
+  resetPickerUi();
+}
+
+els.btnPickRegion?.addEventListener('click', openRegionPicker);
+els.btnClearSelector?.addEventListener('click', () => {
+  const input = $('#selector');
+  if (input) input.value = '';
+  updateSelectorHint('');
+});
+els.pickerClose?.addEventListener('click', closeRegionPicker);
+els.pickerReload?.addEventListener('click', () => {
+  const url = $('#url')?.value.trim();
+  if (url) loadPickerFrame(url);
+});
+els.pickerApply?.addEventListener('click', () => {
+  if (!pickerSelected?.selector) return;
+  const input = $('#selector');
+  if (input) input.value = pickerSelected.selector;
+  updateSelectorHint(pickerSelected.selector);
+  closeRegionPicker();
+});
+els.pickerDialog?.addEventListener('close', () => {
+  if (els.pickerFrame) els.pickerFrame.src = 'about:blank';
+});
+
+window.addEventListener('message', (event) => {
+  if (!els.pickerDialog?.open) return;
+  const data = event.data;
+  if (!data || typeof data !== 'object') return;
+  if (data.type === 'monitorweb-pick-cancel') {
+    closeRegionPicker();
+    return;
+  }
+  if (data.type !== 'monitorweb-pick') return;
+  const selector = String(data.selector || '').trim();
+  if (!selector) return;
+  pickerSelected = {
+    selector,
+    text: String(data.text || '').trim(),
+  };
+  if (els.pickerSelector) els.pickerSelector.textContent = selector;
+  if (els.pickerSample) {
+    els.pickerSample.textContent = pickerSelected.text
+      ? `Prévia: ${pickerSelected.text}`
+      : '(região sem texto visível — o monitoramento usará o HTML dessa área)';
+  }
+  if (els.pickerApply) els.pickerApply.disabled = false;
+});
+
+$('#selector')?.addEventListener('input', (e) => {
+  updateSelectorHint(e.target.value.trim());
 });
 
 async function handleDiffClick(eventId) {

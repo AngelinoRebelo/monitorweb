@@ -88,6 +88,17 @@
                     <input id="selector" name="selector" type="text" placeholder="#conteudo, .main, article" />
                   </label>
                 </div>
+                <div class="selector-tools">
+                  <button type="button" id="btn-pick-region" class="btn ghost">
+                    Selecionar parte da página
+                  </button>
+                  <button type="button" id="btn-clear-selector" class="btn ghost">
+                    Página inteira
+                  </button>
+                </div>
+                <p id="selector-hint" class="hint">
+                  Sem seletor, monitora a página toda (no SEI, andamentos/protocolos).
+                </p>
                 <label class="check">
                   <input id="enabled" name="enabled" type="checkbox" checked />
                   Ativo imediatamente
@@ -244,6 +255,34 @@
           <button type="button" id="diff-close" class="btn ghost">Fechar</button>
         </header>
         <div id="diff-view" class="diff-view"></div>
+      </div>
+    </dialog>
+
+    <dialog id="picker-dialog" class="picker-dialog">
+      <div class="dialog-body picker-body">
+        <header>
+          <div>
+            <h3>Selecionar área a monitorar</h3>
+            <p class="diff-summary">
+              Clique na região da página. Só essa parte será observada nas checagens.
+            </p>
+          </div>
+          <button type="button" id="picker-close" class="btn ghost">Fechar</button>
+        </header>
+        <div class="picker-frame-wrap">
+          <iframe id="picker-frame" title="Pré-visualização da página" sandbox="allow-scripts"></iframe>
+          <p id="picker-loading" class="picker-loading">Carregando página…</p>
+        </div>
+        <footer class="picker-foot">
+          <div class="picker-meta">
+            <p id="picker-selector" class="picker-selector">Nenhuma área selecionada</p>
+            <p id="picker-sample" class="picker-sample"></p>
+          </div>
+          <div class="picker-actions">
+            <button type="button" id="picker-reload" class="btn ghost">Recarregar</button>
+            <button type="button" id="picker-apply" class="btn primary" disabled>Usar esta área</button>
+          </div>
+        </footer>
       </div>
     </dialog>
 

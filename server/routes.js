@@ -16,6 +16,7 @@ import { changesFromDiffText } from './humanDiff.js';
 import { checkMonitor } from './monitor.js';
 import { notifyChange, notifyStatus } from './notify.js';
 import { fetchResponse, decodeResponseBody, formatFetchError } from './fetchPage.js';
+import { fetchPageForPicker, fetchSelectorSample } from './preview.js';
 import { getUserQuota } from './auth.js';
 
 const router = Router();
@@ -82,6 +83,49 @@ router.get('/health/outbound', async (req, res) => {
         ? 'O SEI geralmente não responde a partir do Railway (EUA). Use PROXY_URL no Brasil ou rode localmente.'
         : null,
     });
+  }
+});
+
+router.get('/preview/frame', async (req, res) => {
+  const target = String(req.query.url || '').trim();
+  if (!target || !isValidUrl(target)) {
+    res.status(400).type('html').send('<!doctype html><p>URL inválida. Informe http(s)://…</p>');
+    return;
+  }
+  try {
+    const { html } = await fetchPageForPicker(target);
+    res
+      .status(200)
+      .set({
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Content-Security-Policy':
+          "default-src 'none'; img-src * data: blob:; style-src 'unsafe-inline' *; font-src *; script-src 'unsafe-inline'; base-uri *; form-action 'none'; frame-ancestors 'self'",
+      })
+      .send(html);
+  } catch (err) {
+    const message = formatFetchError(err, target);
+    res.status(502).type('html').send(
+      `<!doctype html><html><body style="font:14px system-ui;background:#10271e;color:#e8f3ec;padding:1.5rem">
+        <h1 style="font-size:1.1rem">Não foi possível carregar a página</h1>
+        <p>${String(message).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</p>
+        <p style="opacity:.7">Confira a URL ou tente de novo em instantes.</p>
+      </body></html>`
+    );
+  }
+});
+
+router.post('/preview/sample', async (req, res) => {
+  const { url, selector } = req.body || {};
+  if (!url || !isValidUrl(url)) {
+    return res.status(400).json({ error: 'URL inválida' });
+  }
+  try {
+    const sample = await fetchSelectorSample(url, selector || '');
+    if (!sample.ok) return res.status(400).json(sample);
+    res.json(sample);
+  } catch (err) {
+    res.status(502).json({ error: formatFetchError(err, url) });
   }
 });
 
