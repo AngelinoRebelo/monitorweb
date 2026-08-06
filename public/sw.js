@@ -1,5 +1,5 @@
-const CACHE = 'monitorweb-v7-shell';
-const ASSETS = ['/login.html', '/styles.css', '/login.js', '/reset.html', '/reset.js', '/manifest.json', '/icon.svg'];
+const CACHE = 'monitorweb-v8-shell';
+const ASSETS = ['/login.html', '/styles.css', '/login.js', '/reset.html', '/reset.js', '/manifest.json', '/icon.svg', '/brand.js'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
