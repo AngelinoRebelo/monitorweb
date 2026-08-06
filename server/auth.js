@@ -937,6 +937,25 @@ adminRouter.get('/billing', async (_req, res) => {
   });
 });
 
+adminRouter.get('/layout', async (_req, res) => {
+  const { getUiLayout } = await import('./layout.js');
+  res.json(getUiLayout());
+});
+
+adminRouter.put('/layout', async (req, res) => {
+  const { saveUiLayout } = await import('./layout.js');
+  const blocks = req.body?.blocks;
+  if (!blocks || typeof blocks !== 'object') {
+    return res.status(400).json({ error: 'Informe blocks com as dimensões' });
+  }
+  res.json(saveUiLayout(blocks));
+});
+
+adminRouter.delete('/layout', async (_req, res) => {
+  const { resetUiLayout } = await import('./layout.js');
+  res.json(resetUiLayout());
+});
+
 adminRouter.put('/billing', async (req, res) => {
   const { saveBillingConfig, getBillingConfig } = await import('./billing.js');
   const patch = {};

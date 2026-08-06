@@ -1,3 +1,5 @@
+import { initLayoutEditor, refreshLayoutTargets } from './layout-editor.js';
+
 const $ = (sel) => document.querySelector(sel);
 
 const els = {
@@ -414,7 +416,7 @@ function renderMonitors(monitors) {
       const open = expandedIds.has(m.id);
       const events = eventsForMonitor(m.id);
       const card = `
-      <article class="card accordion ${open ? 'is-open' : ''}" data-id="${m.id}">
+      <article class="card accordion ${open ? 'is-open' : ''}" data-id="${m.id}" data-layout-id="monitor-card">
         <button type="button" class="accordion-trigger" data-action="toggle-expand" aria-expanded="${open}">
           <span class="chevron" aria-hidden="true"></span>
           <span class="accordion-title">
@@ -474,6 +476,7 @@ function renderMonitors(monitors) {
     .join('');
 
   els.monitors.innerHTML = cardsHtml;
+  refreshLayoutTargets();
 }
 
 function renderDashboard() {
@@ -733,6 +736,7 @@ function renderUsers(users) {
       </article>`;
     })
     .join('');
+  refreshLayoutTargets();
 }
 
 async function refreshAdmin() {
@@ -1310,7 +1314,7 @@ function renderPlans(plans) {
         : ['Alertas por e-mail', `Até ${maxSites} sites para monitoramento`];
       const checkoutLocked = isActive;
       return `
-    <article class="plan-card${isActive ? ' is-active' : ''}" data-plan-id="${escapeHtml(p.id)}">
+    <article class="plan-card${isActive ? ' is-active' : ''}" data-plan-id="${escapeHtml(p.id)}" data-layout-id="plan-card">
       ${isActive ? `<span class="plan-seal" title="Assinatura vigente">Ativo</span>` : ''}
       <h3>${escapeHtml(p.label)}</h3>
       <p class="plan-price">R$ ${Number(p.price).toFixed(0)} <span>/ ${Number(p.days)} dia(s)</span></p>
@@ -1330,6 +1334,7 @@ function renderPlans(plans) {
     </article>`;
     })
     .join('');
+  refreshLayoutTargets();
 }
 
 let pixPollTimer = null;
@@ -2110,6 +2115,19 @@ updateNotifyUi();
     if (els.navBilling && me.user?.role === 'admin') {
       els.navBilling.classList.remove('hidden');
     }
+    await initLayoutEditor({
+      api,
+      flash: (message, isError) => {
+        if (els.adminFlash && currentView === 'admin') {
+          els.adminFlash.hidden = false;
+          els.adminFlash.textContent = message;
+          els.adminFlash.classList.toggle('warn-text', Boolean(isError));
+          return;
+        }
+        billingFlash(message, Boolean(isError));
+      },
+      isAdmin: me.user?.role === 'admin',
+    });
     syncEmailNotifyUi(me.user);
     if (els.quotaHint && me.quota) {
       els.quotaHint.hidden = false;

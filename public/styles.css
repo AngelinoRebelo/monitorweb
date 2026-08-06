@@ -2358,3 +2358,133 @@ body.access-restricted #view-billing-admin {
     flex-direction: column;
   }
 }
+
+/* —— Layout editor (admin) —— */
+.layout-edit-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 80;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  width: min(720px, calc(100vw - 1.5rem));
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(212, 162, 76, 0.45);
+  border-radius: 14px;
+  background: rgba(11, 28, 22, 0.94);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+}
+
+.layout-edit-bar[hidden] {
+  display: none !important;
+}
+
+.layout-edit-bar p {
+  margin: 0;
+  flex: 1;
+  min-width: 12rem;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.layout-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+body.layout-edit-mode [data-layout-id] {
+  position: relative;
+  outline: 1px dashed rgba(212, 162, 76, 0.55);
+  outline-offset: 2px;
+}
+
+body.layout-edit-mode [data-layout-id].is-resizing {
+  outline-color: #5dcaa0;
+  outline-style: solid;
+}
+
+.layout-handles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.layout-handle {
+  position: absolute;
+  pointer-events: auto;
+  background: #d4a24c;
+  border: 1px solid #1a1408;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.layout-handle-n,
+.layout-handle-s {
+  left: 18%;
+  right: 18%;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.layout-handle-n {
+  top: -4px;
+}
+.layout-handle-s {
+  bottom: -4px;
+}
+
+.layout-handle-e,
+.layout-handle-w {
+  top: 18%;
+  bottom: 18%;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.layout-handle-e {
+  right: -4px;
+}
+.layout-handle-w {
+  left: -4px;
+}
+
+.layout-handle-ne,
+.layout-handle-nw,
+.layout-handle-se,
+.layout-handle-sw {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.layout-handle-ne {
+  top: -5px;
+  right: -5px;
+  cursor: nesw-resize;
+}
+.layout-handle-nw {
+  top: -5px;
+  left: -5px;
+  cursor: nwse-resize;
+}
+.layout-handle-se {
+  bottom: -5px;
+  right: -5px;
+  cursor: nwse-resize;
+}
+.layout-handle-sw {
+  bottom: -5px;
+  left: -5px;
+  cursor: nesw-resize;
+}
+
+body.layout-edit-mode {
+  padding-bottom: 5rem;
+}
