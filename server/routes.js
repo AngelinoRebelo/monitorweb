@@ -31,7 +31,7 @@ function isValidUrl(value) {
 
 function publicMonitor(monitor) {
   if (!monitor) return null;
-  const { lastContent, ...rest } = monitor;
+  const { lastContent, pendingContent, ...rest } = monitor;
   return rest;
 }
 

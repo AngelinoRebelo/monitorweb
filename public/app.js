@@ -405,11 +405,21 @@ function renderMonitors(monitors) {
 
         <div class="accordion-summary">
           <p class="meta"><a href="${escapeAttr(m.url)}" target="_blank" rel="noopener">${escapeHtml(m.url)}</a></p>
-          <p class="meta">A cada ${m.intervalMinutes} min${m.selector ? ` · seletor <code>${escapeHtml(m.selector)}</code>` : ''}${m.lastContentKind ? ` · fonte <code>${escapeHtml(m.lastContentKind)}</code>` : ''}</p>
+          <p class="meta">A cada ${m.intervalMinutes} min${m.selector ? ` · seletor <code>${escapeHtml(m.selector)}</code>` : ''}${m.lastContentKind ? ` · fonte <code>${escapeHtml(m.lastContentKind)}</code>` : ''}${
+            m.pendingHashCount
+              ? ` · confirmando ${Number(m.pendingHashCount)}/2`
+              : ''
+          }</p>
           ${m.lastSourceUrl && m.lastSourceUrl !== m.url ? `<p class="meta">API: <a href="${escapeAttr(m.lastSourceUrl)}" target="_blank" rel="noopener">${escapeHtml(m.lastSourceUrl)}</a></p>` : ''}
           <p class="meta">Última alteração ${formatDate(m.lastChangedAt)}</p>
           <p class="meta">Última checagem ${formatDate(m.lastCheckedAt)}</p>
-          ${m.lastError ? `<p class="meta warn-text">Aviso: ${escapeHtml(m.lastError)}</p>` : ''}
+          ${
+            m.lastError
+              ? `<p class="meta${m.lastStatus === 'error' ? ' warn-text' : ''}">${
+                  m.lastStatus === 'error' ? 'Aviso: ' : ''
+                }${escapeHtml(m.lastError)}</p>`
+              : ''
+          }
           <div class="actions">
             <button class="btn small" data-action="check" type="button">Verificar agora</button>
             <button class="btn small" data-action="toggle" type="button">${m.enabled ? 'Pausar' : 'Ativar'}</button>

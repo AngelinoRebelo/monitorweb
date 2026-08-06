@@ -197,7 +197,23 @@ export function deleteMonitor(id) {
 
 export function saveCheckResult(
   id,
-  { hash, content, status, error, changed, summary, diffText, changes, sourceUrl, contentKind }
+  {
+    hash,
+    content,
+    status,
+    error,
+    changed,
+    summary,
+    diffText,
+    changes,
+    sourceUrl,
+    contentKind,
+    updateHash = true,
+    lastContent,
+    pendingHash,
+    pendingHashCount,
+    pendingContent,
+  }
 ) {
   const store = read();
   const idx = store.monitors.findIndex((m) => m.id === id);
@@ -205,15 +221,24 @@ export function saveCheckResult(
 
   const now = new Date().toISOString();
   const monitor = store.monitors[idx];
-  store.monitors[idx] = {
+  const next = {
     ...monitor,
     lastCheckedAt: now,
     lastStatus: status,
     lastError: error || null,
-    lastHash: hash ?? monitor.lastHash,
+    lastHash: updateHash && hash != null ? hash : monitor.lastHash,
     lastChangedAt: changed ? now : monitor.lastChangedAt,
     updatedAt: now,
   };
+
+  if (lastContent !== undefined) next.lastContent = lastContent;
+  if (contentKind != null) next.lastContentKind = contentKind;
+  if (sourceUrl != null) next.lastSourceUrl = sourceUrl;
+  if (pendingHash !== undefined) next.pendingHash = pendingHash;
+  if (pendingHashCount !== undefined) next.pendingHashCount = pendingHashCount;
+  if (pendingContent !== undefined) next.pendingContent = pendingContent;
+
+  store.monitors[idx] = next;
 
   if (changed) {
     store.events.unshift({

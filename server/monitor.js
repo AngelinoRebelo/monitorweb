@@ -14,6 +14,9 @@ const VOLATILE_JSON_KEYS = new Set([
   'generatedAt',
 ]);
 
+/** New content must appear this many consecutive checks before counting as a real change. */
+const CHANGE_CONFIRMATIONS = 2;
+
 function normalizeText(text) {
   return text
     .replace(/\r\n/g, '\n')
@@ -56,7 +59,82 @@ function formatJsonContent(data) {
   return JSON.stringify(canonicalizeJson(data), null, 2);
 }
 
-function extractHtmlText(html, selector) {
+function isSeiUrl(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return /(^|\.)sei\./i.test(host) || (/sei/i.test(host) && /\.gov\.br$/i.test(host));
+  } catch {
+    return false;
+  }
+}
+
+/** Strip tokens / noise that change without real process updates. */
+function scrubVolatileText(text) {
+  return normalizeText(
+    String(text || '')
+      .replace(/PESQUISA_PROCESSUAL\d+/gi, ' ')
+      .replace(/\bhdn[A-Za-z0-9_]+\b/gi, ' ')
+      .replace(/\b[a-f0-9]{32,}\b/gi, ' ')
+      .replace(/\b[A-Za-z0-9_-]{40,}\b/g, (m) => (/[0-9]/.test(m) && /[A-Za-z]/.test(m) ? ' ' : m))
+      .replace(/Digite o c[oó]digo da imagem:?/gi, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/[ \t]{2,}/g, ' ')
+  );
+}
+
+/**
+ * Detect SEI/captcha/restricted captures that should NOT overwrite the baseline
+ * or be reported as content changes.
+ */
+function detectUnusableCapture(html, text) {
+  const blob = `${html || ''}\n${text || ''}`.toLowerCase();
+  if (/digite o c[oó]digo da imagem/.test(blob)) {
+    return 'Captcha do SEI detectado; captura ignorada (não é alteração do processo).';
+  }
+  if (/processo ou documento de acesso restrito/.test(blob)) {
+    const hasUseful =
+      /lista de protocolos|lista de andamentos/i.test(text) &&
+      /(despacho|of[ií]cio|publica[cç][aã]o|anexo|externo)/i.test(text) &&
+      String(text).length > 800;
+    if (!hasUseful) {
+      return 'Página de acesso restrito sem conteúdo útil; captura ignorada.';
+    }
+  }
+  return null;
+}
+
+function extractSeiRelevantText(html) {
+  const $ = cheerio.load(html);
+  $('script, style, noscript, svg, iframe').remove();
+  // Do not remove <form>: SEI wraps almost the whole page in a form.
+  $('img[src*="aptcha"], img[src*="Captcha"], img[id*="Captcha"], img[id*="captcha"]').each((_, el) => {
+    $(el).closest('tr, div').first().remove();
+  });
+
+  const chunks = [];
+  $('table').each((_, el) => {
+    const t = $(el).text();
+    if (
+      /Lista de Protocolos|Lista de Andamentos|Protocolo|Andamento|Documentos/i.test(t) &&
+      t.replace(/\s+/g, ' ').trim().length > 40
+    ) {
+      chunks.push(normalizeText(t));
+    }
+  });
+
+  if (chunks.length) {
+    return scrubVolatileText(chunks.join('\n\n'));
+  }
+
+  const body = $('body').length ? $('body') : $.root();
+  return scrubVolatileText(body.text());
+}
+
+function extractHtmlText(html, selector, { pageUrl } = {}) {
+  if (!selector && pageUrl && isSeiUrl(pageUrl)) {
+    return extractSeiRelevantText(html);
+  }
+
   const $ = cheerio.load(html);
   $('script, style, noscript, svg, iframe').remove();
   const root = selector ? $(selector) : $('body').length ? $('body') : $.root();
@@ -64,7 +142,8 @@ function extractHtmlText(html, selector) {
     throw new Error(`Seletor CSS não encontrado: ${selector}`);
   }
   const text = normalizeText(root.text());
-  return text || normalizeText($.root().text());
+  const raw = text || normalizeText($.root().text());
+  return pageUrl && isSeiUrl(pageUrl) ? scrubVolatileText(raw) : scrubVolatileText(raw);
 }
 
 function looksLikeSpaShell(html, text) {
@@ -154,6 +233,62 @@ function summarizeRifaJson(content) {
   }
 }
 
+/**
+ * Decide if hash change is confirmed (debounce) or still pending.
+ * Returns { changed, isFirst, pendingHash, pendingHashCount, pendingContent, statusNote }
+ */
+function resolveChangeState(monitor, hash, content, { switchedToApi }) {
+  const isFirst = !monitor.lastHash || switchedToApi;
+  if (isFirst) {
+    return {
+      changed: false,
+      isFirst: true,
+      pendingHash: null,
+      pendingHashCount: 0,
+      pendingContent: null,
+      updateBaseline: true,
+      statusNote: null,
+    };
+  }
+
+  if (hash === monitor.lastHash) {
+    return {
+      changed: false,
+      isFirst: false,
+      pendingHash: null,
+      pendingHashCount: 0,
+      pendingContent: null,
+      updateBaseline: true,
+      statusNote: null,
+    };
+  }
+
+  const samePending = monitor.pendingHash === hash;
+  const count = samePending ? Number(monitor.pendingHashCount || 0) + 1 : 1;
+
+  if (count >= CHANGE_CONFIRMATIONS) {
+    return {
+      changed: true,
+      isFirst: false,
+      pendingHash: null,
+      pendingHashCount: 0,
+      pendingContent: null,
+      updateBaseline: true,
+      statusNote: null,
+    };
+  }
+
+  return {
+    changed: false,
+    isFirst: false,
+    pendingHash: hash,
+    pendingHashCount: count,
+    pendingContent: content.slice(0, 200000),
+    updateBaseline: false,
+    statusNote: `Possível alteração — confirmando (${count}/${CHANGE_CONFIRMATIONS})`,
+  };
+}
+
 export async function checkMonitor(id, { previousContent } = {}) {
   const monitor = getMonitor(id);
   if (!monitor) throw new Error('Monitor não encontrado');
@@ -162,6 +297,7 @@ export async function checkMonitor(id, { previousContent } = {}) {
     let content;
     let sourceUrl = monitor.url;
     let kind = 'html';
+    let rawHtml = '';
 
     const preferredApi = gestaoInteligenteRifaApi(monitor.url);
     const earlyJson = await tryJsonSources(
@@ -180,12 +316,13 @@ export async function checkMonitor(id, { previousContent } = {}) {
 
       const type = (res.headers.get('content-type') || '').toLowerCase();
       const body = await decodeResponseBody(res);
+      rawHtml = body;
 
       if (type.includes('json') || body.trim().startsWith('{') || body.trim().startsWith('[')) {
         content = formatJsonContent(JSON.parse(body));
         kind = 'json';
       } else {
-        const htmlText = extractHtmlText(body, monitor.selector);
+        const htmlText = extractHtmlText(body, monitor.selector, { pageUrl: monitor.url });
         if (looksLikeSpaShell(body, htmlText) || htmlText.length < 80) {
           const api = await tryJsonSources(discoverApiCandidates(monitor.url, body));
           if (api) {
@@ -203,6 +340,23 @@ export async function checkMonitor(id, { previousContent } = {}) {
       }
     }
 
+    if (kind === 'html' || kind === 'html-shell') {
+      const blocked = detectUnusableCapture(rawHtml, content);
+      if (blocked) {
+        const result = saveCheckResult(id, {
+          hash: null,
+          content: null,
+          status: 'error',
+          error: blocked,
+          changed: false,
+          updateHash: false,
+          contentKind: kind,
+          sourceUrl,
+        });
+        return { ...result, changed: false, error: blocked, isFirst: false, kind };
+      }
+    }
+
     const hash = hashContent(content);
     const prevWasShell =
       previousContent != null &&
@@ -210,18 +364,19 @@ export async function checkMonitor(id, { previousContent } = {}) {
       previousContent.length < 80 &&
       !previousContent.trim().startsWith('{');
     const switchedToApi = kind === 'json' && prevWasShell;
-    const isFirst = !monitor.lastHash || switchedToApi;
-    const changed = !isFirst && monitor.lastHash !== hash;
+
+    const decision = resolveChangeState(monitor, hash, content, { switchedToApi });
+    const { changed, isFirst } = decision;
 
     let summary = isFirst
       ? kind === 'json'
         ? 'Primeira captura dos dados dinâmicos (API)'
         : 'Primeira captura registrada'
-      : null;
+      : decision.statusNote;
     let diffText = '';
     let changes = [];
     if (changed) {
-      const before = previousContent || '';
+      const before = previousContent || monitor.pendingContent || '';
       const diff = summarizeDiff(before, content);
       summary = summarizeRifaJson(content) || diff.summary;
       diffText = diff.diffText;
@@ -231,23 +386,28 @@ export async function checkMonitor(id, { previousContent } = {}) {
     }
 
     const result = saveCheckResult(id, {
-      hash,
-      content,
+      hash: decision.updateBaseline ? hash : null,
+      content: decision.updateBaseline ? content : null,
       status: changed ? 'changed' : kind === 'html-shell' ? 'error' : 'ok',
       error:
         kind === 'html-shell'
           ? 'Página parece SPA sem API descoberta; monitorando só o HTML estático'
-          : null,
+          : decision.statusNote,
       changed,
       summary,
       diffText,
       changes,
       sourceUrl,
       contentKind: kind,
+      updateHash: decision.updateBaseline,
+      lastContent: decision.updateBaseline ? content.slice(0, 200000) : undefined,
+      pendingHash: decision.pendingHash,
+      pendingHashCount: decision.pendingHashCount,
+      pendingContent: decision.pendingContent,
     });
 
+    // Keep lastSourceUrl / kind even while confirming.
     updateMonitor(id, {
-      lastContent: content.slice(0, 200000),
       lastSourceUrl: sourceUrl,
       lastContentKind: kind,
     });
@@ -259,6 +419,7 @@ export async function checkMonitor(id, { previousContent } = {}) {
       content,
       sourceUrl,
       kind,
+      confirming: Boolean(decision.pendingHash),
     };
   } catch (err) {
     const message = formatFetchError(err, monitor.url);
@@ -268,6 +429,7 @@ export async function checkMonitor(id, { previousContent } = {}) {
       status: 'error',
       error: message,
       changed: false,
+      updateHash: false,
     });
     return { ...result, changed: false, error: message };
   }
