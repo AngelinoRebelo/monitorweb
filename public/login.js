@@ -1,7 +1,3 @@
-import { bindLogoPicker } from './brand.js';
-
-bindLogoPicker();
-
 const $ = (sel) => document.querySelector(sel);
 
 const els = {

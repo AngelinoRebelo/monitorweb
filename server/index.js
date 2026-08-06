@@ -31,7 +31,6 @@ const PUBLIC_FILES = new Set([
   '/reset.js',
   '/styles.css',
   '/icon.svg',
-  '/brand.js',
   '/manifest.json',
   '/sw.js',
 ]);
