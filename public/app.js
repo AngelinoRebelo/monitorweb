@@ -1824,11 +1824,15 @@ function toLocalInput(iso) {
 
 function renderBillingPayments(payments) {
   if (!els.billingPaymentsList) return;
-  if (!payments?.length) {
-    els.billingPaymentsList.innerHTML = `<p class="empty">Nenhum pagamento ainda.</p>`;
+  const completed = (payments || []).filter((p) => {
+    const status = String(p.status || '').toLowerCase();
+    return status === 'approved' || status === 'accredited';
+  });
+  if (!completed.length) {
+    els.billingPaymentsList.innerHTML = `<p class="empty">Nenhum pagamento concluído ainda.</p>`;
     return;
   }
-  els.billingPaymentsList.innerHTML = payments
+  els.billingPaymentsList.innerHTML = completed
     .map(
       (p) => `
     <article class="card payment-card">
