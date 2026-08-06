@@ -43,7 +43,6 @@
 
         <div class="sidebar-foot">
           <span id="user-email" class="user-email" hidden></span>
-          <button type="button" id="btn-layout-edit" class="btn ghost side-btn hidden">Editar layout</button>
           <button type="button" id="btn-notify" class="btn ghost side-btn">Ativar notificações</button>
           <button type="button" id="btn-install" class="btn ghost side-btn hidden">Instalar no PC</button>
           <button type="button" id="btn-logout" class="btn ghost side-btn">Sair</button>
@@ -57,7 +56,7 @@
         </header>
 
         <section id="view-dashboard" class="view">
-          <div class="panel dash-panel" data-layout-id="dash-panel">
+          <div class="panel dash-panel">
             <p class="lead">Resumo das últimas alterações nos seus monitores.</p>
             <div class="dash-stats" id="dash-stats"></div>
             <h2 class="dash-heading">Últimas alterações</h2>
@@ -67,7 +66,7 @@
 
         <section id="view-monitors" class="view">
           <div class="layout">
-            <section class="panel form-panel" data-layout-id="form-panel">
+            <section class="panel form-panel">
               <h2>Novo monitor</h2>
               <p class="lead">
                 Informe a URL e o intervalo. Em sites SPA, o MonitorWeb detecta a API automaticamente.
@@ -156,7 +155,7 @@
               </div>
             </section>
 
-            <section class="panel list-panel" data-layout-id="list-panel">
+            <section class="panel list-panel">
               <div class="section-head">
                 <h2>Monitores</h2>
               </div>
@@ -169,118 +168,130 @@
         </section>
 
         <section id="view-billing" class="view">
-          <div class="panel billing-panel" data-layout-id="billing-panel">
+          <div class="panel billing-panel">
             <p class="lead">
               Escolha um plano para liberar notificações por e-mail e ampliar o limite de sites.
               Pague com <strong>Pix</strong> ou <strong>cartão</strong> na própria página.
             </p>
             <p id="billing-status" class="hint"></p>
             <p id="billing-flash" class="hint" hidden></p>
-            <div id="plans-grid" class="plans-grid" data-layout-id="plans-grid"></div>
+            <div id="plans-grid" class="plans-grid"></div>
           </div>
         </section>
 
         <section id="view-admin" class="view">
-          <div class="panel admin-embed" data-layout-id="admin-panel">
+          <div class="panel admin-embed">
             <p class="lead">
               Gerencie contas, limites de sites, ativação e recuperação de senha.
             </p>
             <p id="mail-status" class="hint"></p>
             <p id="admin-flash" class="hint" hidden></p>
-            <div id="users-list" class="users-list" data-layout-id="admin-users"></div>
+            <div id="users-list" class="users-list"></div>
           </div>
         </section>
 
         <section id="view-billing-admin" class="view">
-          <div class="panel admin-embed" data-layout-id="billing-admin-panel">
-            <p class="lead">Cobranças: planos, Mercado Pago e status das assinaturas.</p>
-            <p id="billing-admin-flash" class="hint" hidden></p>
+          <div class="panel admin-embed billing-admin">
+            <header class="billing-admin-hero">
+              <div>
+                <h2 class="billing-admin-title">Cobranças</h2>
+                <p class="lead">Configure Mercado Pago, trial, planos e acompanhe assinaturas e pagamentos.</p>
+              </div>
+              <p id="billing-admin-flash" class="hint" hidden></p>
+            </header>
 
-            <div class="billing-admin-grid">
-              <form id="mp-config-form" class="card billing-card" data-layout-id="billing-mp">
-                <h2>Mercado Pago</h2>
-                <p class="hint">Cole Access Token, Public Key e Assinatura secreta do webhook. A Public Key é necessária para pagamento com cartão na página.</p>
-                <label>
-                  Access Token (API)
-                  <input id="mp-access-token" type="password" autocomplete="off" placeholder="APP_USR-..." />
-                </label>
-                <label>
-                  Public Key
-                  <input id="mp-public-key" type="text" autocomplete="off" placeholder="APP_USR-..." />
-                </label>
-                <label>
-                  Webhook secret (assinatura secreta)
-                  <input id="mp-webhook-secret" type="password" autocomplete="off" placeholder="segredo do webhook" />
-                </label>
-                <label class="check">
-                  <input id="mp-enabled" type="checkbox" />
-                  Pagamentos ativos
-                </label>
-                <p class="hint">Webhook: <code id="mp-webhook-url"></code></p>
-                <button type="submit" class="btn primary">Salvar Mercado Pago</button>
-              </form>
+            <div class="billing-admin-stack">
+              <section class="billing-section" aria-labelledby="billing-sec-integration">
+                <h3 id="billing-sec-integration" class="billing-section-title">Integração e liberação</h3>
+                <div class="billing-admin-grid billing-admin-grid-pair">
+                  <form id="mp-config-form" class="card billing-card">
+                    <h2>Mercado Pago</h2>
+                    <p class="hint">
+                      Access Token, Public Key e segredo do webhook. A Public Key é necessária para cartão na página.
+                    </p>
+                    <label>
+                      Access Token (API)
+                      <input id="mp-access-token" type="password" autocomplete="off" placeholder="APP_USR-..." />
+                    </label>
+                    <label>
+                      Public Key
+                      <input id="mp-public-key" type="text" autocomplete="off" placeholder="APP_USR-..." />
+                    </label>
+                    <label>
+                      Webhook secret (assinatura secreta)
+                      <input id="mp-webhook-secret" type="password" autocomplete="off" placeholder="segredo do webhook" />
+                    </label>
+                    <label class="notify-switch billing-toggle" id="mp-enabled-wrap">
+                      <span class="notify-switch-label">Pagamentos ativos</span>
+                      <input id="mp-enabled" type="checkbox" class="billing-toggle-input" hidden />
+                      <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+                    </label>
+                    <p class="hint billing-webhook-line">Webhook: <code id="mp-webhook-url"></code></p>
+                    <button type="submit" class="btn primary">Salvar Mercado Pago</button>
+                  </form>
 
-              <form id="reconcile-form" class="card billing-card" data-layout-id="billing-reconcile">
-                <h2>Liberar pagamento manual</h2>
-                <p class="hint">
-                  Se o Pix já foi pago mas o plano não liberou, cole o ID do pagamento do Mercado Pago.
-                </p>
-                <label>
-                  ID do pagamento (MP)
-                  <input id="mp-reconcile-id" type="text" placeholder="ex.: 171262618363" />
-                </label>
-                <button type="submit" class="btn primary">Confirmar e liberar</button>
-              </form>
-
-              <form id="trial-config-form" class="card billing-card billing-card-compact" data-layout-id="billing-trial">
-                <h2>Plano trial</h2>
-                <p class="hint">Padrão das contas novas no período gratuito.</p>
-                <div class="trial-admin-row">
-                  <label>
-                    Dias
-                    <input id="billing-trial-days" type="number" min="0" max="365" value="30" />
-                  </label>
-                  <label>
-                    E-mails / dia
-                    <input id="billing-trial-emails" type="number" min="0" max="500" value="10" />
-                  </label>
-                  <label>
-                    Sites iniciais
-                    <input id="billing-trial-sites" type="number" min="1" max="1000" value="5" />
-                  </label>
+                  <form id="reconcile-form" class="card billing-card">
+                    <h2>Liberar pagamento manual</h2>
+                    <p class="hint">
+                      Se o Pix ou cartão já foi pago e o plano não liberou, cole o ID do pagamento no Mercado Pago.
+                    </p>
+                    <label>
+                      ID do pagamento (MP)
+                      <input id="mp-reconcile-id" type="text" placeholder="ex.: 171262618363" />
+                    </label>
+                    <button type="submit" class="btn primary">Confirmar e liberar</button>
+                  </form>
                 </div>
-                <button type="submit" class="btn primary small">Salvar trial</button>
-              </form>
+              </section>
 
-              <form id="plans-admin-form" class="card billing-card" data-layout-id="billing-plans">
-                <div class="section-head plans-admin-head">
-                  <h2>Planos e valores</h2>
-                  <button type="button" id="btn-add-plan" class="btn small">Novo plano</button>
+              <section class="billing-section" aria-labelledby="billing-sec-commercial">
+                <h3 id="billing-sec-commercial" class="billing-section-title">Configuração comercial</h3>
+                <div class="billing-admin-grid billing-admin-grid-commercial">
+                  <form id="trial-config-form" class="card billing-card">
+                    <h2>Plano trial</h2>
+                    <p class="hint">Padrão das contas novas no período gratuito.</p>
+                    <div class="trial-admin-row">
+                      <label>
+                        Dias
+                        <input id="billing-trial-days" type="number" min="0" max="365" value="30" />
+                      </label>
+                      <label>
+                        E-mails / dia
+                        <input id="billing-trial-emails" type="number" min="0" max="500" value="10" />
+                      </label>
+                      <label>
+                        Sites iniciais
+                        <input id="billing-trial-sites" type="number" min="1" max="1000" value="5" />
+                      </label>
+                    </div>
+                    <button type="submit" class="btn primary">Salvar trial</button>
+                  </form>
+
+                  <form id="plans-admin-form" class="card billing-card billing-card-plans">
+                    <div class="section-head plans-admin-head">
+                      <h2>Planos e valores</h2>
+                      <button type="button" id="btn-add-plan" class="btn small">Novo plano</button>
+                    </div>
+                    <div id="plans-admin-list" class="plans-admin-list"></div>
+                    <button type="submit" class="btn primary">Salvar planos</button>
+                  </form>
                 </div>
-                <div id="plans-admin-list" class="plans-admin-list"></div>
-                <button type="submit" class="btn primary">Salvar planos</button>
-              </form>
+              </section>
+
+              <section class="billing-section" aria-labelledby="billing-sec-subs">
+                <h3 id="billing-sec-subs" class="billing-section-title">Assinaturas dos usuários</h3>
+                <div id="billing-users-list" class="users-list"></div>
+              </section>
+
+              <section class="billing-section" aria-labelledby="billing-sec-payments">
+                <h3 id="billing-sec-payments" class="billing-section-title">Pagamentos recentes</h3>
+                <div id="billing-payments-list" class="users-list"></div>
+              </section>
             </div>
-
-            <h2 class="dash-heading">Assinaturas dos usuários</h2>
-            <div id="billing-users-list" class="users-list" data-layout-id="billing-users"></div>
-
-            <h2 class="dash-heading">Pagamentos recentes</h2>
-            <div id="billing-payments-list" class="users-list" data-layout-id="billing-payments"></div>
           </div>
         </section>
       </div>
     </div>
-
-    <div id="layout-edit-bar" class="layout-edit-bar" hidden>
-      <p>Modo layout: arraste o bloco pelo centro ou as bordas. Isso define o padrão para todos.</p>
-      <div class="layout-edit-actions">
-        <button type="button" id="layout-save" class="btn primary small">Salvar para todos</button>
-        <button type="button" id="layout-discard" class="btn ghost small">Descartar</button>
-        <button type="button" id="layout-reset" class="btn ghost small">Restaurar padrão</button>
-      </div>
-    </div>
-
     <dialog id="diff-dialog">
       <div class="dialog-body">
         <header>

@@ -1,5 +1,3 @@
-import { initLayoutEditor, refreshLayoutTargets } from './layout-editor.js';
-
 const $ = (sel) => document.querySelector(sel);
 
 const els = {
@@ -416,7 +414,7 @@ function renderMonitors(monitors) {
       const open = expandedIds.has(m.id);
       const events = eventsForMonitor(m.id);
       const card = `
-      <article class="card accordion ${open ? 'is-open' : ''}" data-id="${m.id}" data-layout-id="monitor-card">
+      <article class="card accordion ${open ? 'is-open' : ''}" data-id="${m.id}">
         <button type="button" class="accordion-trigger" data-action="toggle-expand" aria-expanded="${open}">
           <span class="chevron" aria-hidden="true"></span>
           <span class="accordion-title">
@@ -476,7 +474,6 @@ function renderMonitors(monitors) {
     .join('');
 
   els.monitors.innerHTML = cardsHtml;
-  refreshLayoutTargets();
 }
 
 function renderDashboard() {
@@ -736,7 +733,6 @@ function renderUsers(users) {
       </article>`;
     })
     .join('');
-  refreshLayoutTargets();
 }
 
 async function refreshAdmin() {
@@ -1314,7 +1310,7 @@ function renderPlans(plans) {
         : ['Alertas por e-mail', `Até ${maxSites} sites para monitoramento`];
       const checkoutLocked = isActive;
       return `
-    <article class="plan-card${isActive ? ' is-active' : ''}" data-plan-id="${escapeHtml(p.id)}" data-layout-id="plan-card">
+    <article class="plan-card${isActive ? ' is-active' : ''}" data-plan-id="${escapeHtml(p.id)}">
       ${isActive ? `<span class="plan-seal" title="Assinatura vigente">Ativo</span>` : ''}
       <h3>${escapeHtml(p.label)}</h3>
       <p class="plan-price">R$ ${Number(p.price).toFixed(0)} <span>/ ${Number(p.days)} dia(s)</span></p>
@@ -1334,7 +1330,6 @@ function renderPlans(plans) {
     </article>`;
     })
     .join('');
-  refreshLayoutTargets();
 }
 
 let pixPollTimer = null;
@@ -1713,7 +1708,11 @@ function renderPlansAdmin(plans) {
       <label>Dias<input type="number" min="1" class="plan-days" value="${Number(p.days) || 1}" /></label>
       <label>R$<input type="number" min="0" step="0.01" class="plan-price" value="${Number(p.price) || 0}" /></label>
       <label>Sites<input type="number" min="1" max="1000" class="plan-max-monitors" value="${Number(p.maxMonitors) || 100}" /></label>
-      <label class="check"><input type="checkbox" class="plan-active" ${p.active !== false ? 'checked' : ''} /> Ativo</label>
+      <label class="notify-switch billing-toggle plan-admin-active${p.active !== false ? ' is-on' : ''}">
+        <span class="notify-switch-label">Ativo</span>
+        <input type="checkbox" class="plan-active billing-toggle-input" hidden ${p.active !== false ? 'checked' : ''} />
+        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+      </label>
       <label class="plan-features-field">Detalhes (1 por linha)
         <textarea class="plan-features" rows="2">${escapeHtml(
           (Array.isArray(p.features) ? p.features : []).join('\n')
@@ -1853,6 +1852,22 @@ function renderBillingPayments(payments) {
     .join('');
 }
 
+function syncMpEnabledToggle() {
+  const wrap = document.getElementById('mp-enabled-wrap');
+  if (!wrap || !els.mpEnabled) return;
+  wrap.classList.toggle('is-on', Boolean(els.mpEnabled.checked));
+  wrap.setAttribute('aria-checked', els.mpEnabled.checked ? 'true' : 'false');
+}
+
+els.mpEnabled?.addEventListener('change', syncMpEnabledToggle);
+
+els.plansAdminList?.addEventListener('change', (e) => {
+  const input = e.target.closest?.('.plan-active');
+  if (!input) return;
+  const wrap = input.closest('.plan-admin-active');
+  wrap?.classList.toggle('is-on', Boolean(input.checked));
+});
+
 async function refreshBillingAdmin() {
   const data = await api('/admin/billing');
   if (els.mpWebhookUrl) {
@@ -1862,6 +1877,7 @@ async function refreshBillingAdmin() {
   if (els.mpPublicKey) els.mpPublicKey.value = data.raw?.mercadoPago?.publicKey || '';
   if (els.mpWebhookSecret) els.mpWebhookSecret.value = data.raw?.mercadoPago?.webhookSecret || '';
   if (els.mpEnabled) els.mpEnabled.checked = data.raw?.mercadoPago?.enabled !== false;
+  syncMpEnabledToggle();
   if (els.billingTrialDays) els.billingTrialDays.value = data.raw?.trialDays ?? 30;
   if (els.billingTrialEmails) {
     els.billingTrialEmails.value = data.raw?.trialEmailDailyLimit ?? 10;
@@ -2115,19 +2131,6 @@ updateNotifyUi();
     if (els.navBilling && me.user?.role === 'admin') {
       els.navBilling.classList.remove('hidden');
     }
-    await initLayoutEditor({
-      api,
-      flash: (message, isError) => {
-        if (els.adminFlash && currentView === 'admin') {
-          els.adminFlash.hidden = false;
-          els.adminFlash.textContent = message;
-          els.adminFlash.classList.toggle('warn-text', Boolean(isError));
-          return;
-        }
-        billingFlash(message, Boolean(isError));
-      },
-      isAdmin: me.user?.role === 'admin',
-    });
     syncEmailNotifyUi(me.user);
     if (els.quotaHint && me.quota) {
       els.quotaHint.hidden = false;

@@ -439,18 +439,101 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
-  margin: 1rem 0 1.5rem;
-  align-items: start;
+  margin: 0;
+  align-items: stretch;
+}
+
+.billing-admin {
+  display: grid;
+  gap: 1.35rem;
+}
+
+.billing-admin-hero {
+  display: grid;
+  gap: 0.45rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.billing-admin-title {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.45rem;
+  font-weight: 700;
+}
+
+.billing-admin-hero .lead {
+  margin: 0;
+}
+
+.billing-admin-stack {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.billing-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.billing-section-title {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.billing-admin-grid-pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.billing-admin-grid-commercial {
+  grid-template-columns: minmax(240px, 0.85fr) minmax(0, 1.35fr);
 }
 
 .billing-card {
   display: grid;
   gap: 0.75rem;
+  height: 100%;
+  align-content: start;
+  min-width: 0;
+  overflow: visible;
 }
 
 .billing-card h2 {
   margin: 0;
   font-size: 1.15rem;
+}
+
+.billing-card .btn.primary {
+  justify-self: start;
+  margin-top: auto;
+}
+
+.billing-webhook-line {
+  word-break: break-all;
+}
+
+.billing-toggle {
+  width: 100%;
+  margin: 0.15rem 0;
+}
+
+.billing-toggle.is-on {
+  border-color: rgba(93, 202, 160, 0.4);
+  background: rgba(93, 202, 160, 0.08);
+}
+
+.billing-toggle.is-on .switch-track {
+  background: linear-gradient(135deg, #5dcaa0, #3ea87f);
+  border-color: transparent;
+}
+
+.billing-toggle.is-on .switch-thumb {
+  transform: translate(1.2rem, -50%);
+  background: #f4fff9;
 }
 
 .billing-card-compact {
@@ -487,11 +570,12 @@ body {
 .trial-admin-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.45rem;
+  gap: 0.55rem;
 }
 
 .plans-admin-head {
   margin-bottom: 0;
+  align-items: center;
 }
 
 .plans-admin-head h2 {
@@ -500,41 +584,112 @@ body {
 
 .plans-admin-list {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.75rem;
 }
 
 .plan-admin-row {
   display: grid;
-  grid-template-columns: 1.1fr 0.55fr 0.55fr 0.55fr auto;
-  gap: 0.4rem;
+  grid-template-columns: minmax(7rem, 1.5fr) repeat(3, minmax(4.25rem, 0.65fr)) minmax(6.5rem, 0.9fr);
+  gap: 0.55rem 0.65rem;
   align-items: end;
-  padding-bottom: 0.55rem;
-  border-bottom: 1px solid var(--line);
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.16);
 }
 
 .plan-admin-row:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
+  margin-bottom: 0;
 }
 
 .plan-admin-row label {
   font-size: 0.82rem;
   gap: 0.25rem;
+  min-width: 0;
 }
 
 .plan-admin-row input,
 .plan-admin-row textarea {
-  padding: 0.4rem 0.5rem;
+  padding: 0.45rem 0.55rem;
   font-size: 0.9rem;
+  width: 100%;
+}
+
+.plan-admin-active {
+  align-self: end;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  margin: 0;
+  min-height: 2.55rem;
+}
+
+.plan-admin-active .notify-switch-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.plan-admin-active .switch-track {
+  width: 2.4rem;
+  height: 1.3rem;
+}
+
+.plan-admin-active .switch-thumb {
+  width: 1rem;
+  height: 1rem;
+}
+
+.plan-admin-active.is-on .switch-thumb {
+  transform: translate(1.05rem, -50%);
+}
+
+.plan-features-field {
+  grid-column: 1 / -1;
 }
 
 .plan-features-field textarea {
-  min-height: 2.4rem;
+  min-height: 2.6rem;
   resize: vertical;
+}
+
+.billing-section .users-list {
+  margin-top: 0;
+  gap: 0.75rem;
+}
+
+.payment-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem 0.85rem;
+  min-width: 0;
+  align-content: start;
+}
+
+.payment-card strong {
+  font-size: 0.92rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-card .meta {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 700px) {
   .trial-admin-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
+  .billing-admin-grid-pair,
+  .billing-admin-grid-commercial {
     grid-template-columns: 1fr;
   }
 }
@@ -2187,29 +2342,6 @@ dialog::backdrop {
   margin: 0.15rem 0;
 }
 
-.payment-card {
-  display: grid;
-  gap: 0.2rem;
-  padding: 0.55rem 0.65rem;
-  min-width: 0;
-}
-
-.payment-card strong {
-  font-size: 0.88rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.payment-card .meta {
-  margin: 0;
-  font-size: 0.72rem;
-  line-height: 1.35;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 @media (max-width: 980px) {
   .users-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2357,159 +2489,4 @@ body.access-restricted #view-billing-admin {
   .event {
     flex-direction: column;
   }
-}
-
-/* —— Layout editor (admin) —— */
-.layout-edit-bar {
-  position: fixed;
-  left: 50%;
-  bottom: 1rem;
-  transform: translateX(-50%);
-  z-index: 80;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem 1rem;
-  width: min(720px, calc(100vw - 1.5rem));
-  padding: 0.75rem 1rem;
-  border: 1px solid rgba(212, 162, 76, 0.45);
-  border-radius: 14px;
-  background: rgba(11, 28, 22, 0.94);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(10px);
-}
-
-.layout-edit-bar[hidden] {
-  display: none !important;
-}
-
-.layout-edit-bar p {
-  margin: 0;
-  flex: 1;
-  min-width: 12rem;
-  color: var(--muted);
-  font-size: 0.84rem;
-  line-height: 1.35;
-}
-
-.layout-edit-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-body.layout-edit-mode [data-layout-id] {
-  position: relative;
-  outline: 1px dashed rgba(212, 162, 76, 0.55);
-  outline-offset: 2px;
-}
-
-body.layout-edit-mode [data-layout-id].is-resizing {
-  outline-color: #5dcaa0;
-  outline-style: solid;
-}
-
-body.layout-edit-mode [data-layout-id].is-moving {
-  outline-color: #f0c674;
-  outline-style: solid;
-  cursor: grabbing;
-}
-
-.layout-handles {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 5;
-}
-
-.layout-handle {
-  position: absolute;
-  pointer-events: auto;
-  background: #d4a24c;
-  border: 1px solid #1a1408;
-  border-radius: 2px;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
-}
-
-.layout-handle-move {
-  top: 50%;
-  left: 50%;
-  width: 34px;
-  height: 34px;
-  margin: -17px 0 0 -17px;
-  border-radius: 999px;
-  cursor: grab;
-  background:
-    radial-gradient(circle at center, #f0c674 0 28%, transparent 29%),
-    #d4a24c;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-  z-index: 6;
-}
-
-.layout-handle-move:active {
-  cursor: grabbing;
-}
-
-.layout-handle-n,
-.layout-handle-s {
-  left: 18%;
-  right: 18%;
-  height: 8px;
-  cursor: ns-resize;
-}
-
-.layout-handle-n {
-  top: -4px;
-}
-.layout-handle-s {
-  bottom: -4px;
-}
-
-.layout-handle-e,
-.layout-handle-w {
-  top: 18%;
-  bottom: 18%;
-  width: 8px;
-  cursor: ew-resize;
-}
-
-.layout-handle-e {
-  right: -4px;
-}
-.layout-handle-w {
-  left: -4px;
-}
-
-.layout-handle-ne,
-.layout-handle-nw,
-.layout-handle-se,
-.layout-handle-sw {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-}
-
-.layout-handle-ne {
-  top: -5px;
-  right: -5px;
-  cursor: nesw-resize;
-}
-.layout-handle-nw {
-  top: -5px;
-  left: -5px;
-  cursor: nwse-resize;
-}
-.layout-handle-se {
-  bottom: -5px;
-  right: -5px;
-  cursor: nwse-resize;
-}
-.layout-handle-sw {
-  bottom: -5px;
-  left: -5px;
-  cursor: nesw-resize;
-}
-
-body.layout-edit-mode {
-  padding-bottom: 5rem;
 }

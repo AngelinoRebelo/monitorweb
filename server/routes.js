@@ -17,7 +17,6 @@ import { checkMonitor } from './monitor.js';
 import { notifyChange, notifyStatus } from './notify.js';
 import { fetchResponse, decodeResponseBody, formatFetchError } from './fetchPage.js';
 import { fetchPageForPicker, fetchSelectorSample } from './preview.js';
-import { getUiLayout } from './layout.js';
 import { getUserQuota } from './auth.js';
 
 const router = Router();
@@ -134,9 +133,6 @@ router.get('/settings', (req, res) => {
   res.json(getSettings(req.user.id));
 });
 
-router.get('/layout', (_req, res) => {
-  res.json(getUiLayout());
-});
 
 router.patch('/settings', (req, res) => {
   const settings = updateSettings(req.user.id, req.body || {});
