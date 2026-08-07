@@ -17,8 +17,12 @@ const VOLATILE_JSON_KEYS = new Set([
 
 /** New content must appear this many consecutive checks before counting as a real change. */
 const CHANGE_CONFIRMATIONS = 2;
-/** SEI already filters to protocol/andamento tables — confirm on first stable useful capture. */
-const SEI_CHANGE_CONFIRMATIONS = 1;
+/**
+ * SEI: require 2 consecutive useful captures with the same fingerprint.
+ * Captcha/empty skips do not clear pending — real changes still notify soon,
+ * one-off HTML glitches do not.
+ */
+const SEI_CHANGE_CONFIRMATIONS = 2;
 
 function normalizeText(text) {
   return text
@@ -33,12 +37,27 @@ function hashContent(content) {
 }
 
 function summarizeDiff(before, after) {
-  const beforeLines = before.split('\n');
-  const afterLines = after.split('\n');
+  const beforeLines = before.split('\n').filter(Boolean);
+  const afterLines = after.split('\n').filter(Boolean);
   const patch = createTwoFilesPatch('antes', 'depois', before, after, '', '', {
     context: 2,
   });
   const added = afterLines.length - beforeLines.length;
+
+  if (/\[protocolos\]|\[andamentos\]/i.test(before + after)) {
+    const prevSet = new Set(beforeLines.filter((l) => !/^\[[a-z]+\]$/i.test(l)));
+    const nextSet = new Set(afterLines.filter((l) => !/^\[[a-z]+\]$/i.test(l)));
+    let neu = 0;
+    let rem = 0;
+    for (const line of nextSet) if (!prevSet.has(line)) neu += 1;
+    for (const line of prevSet) if (!nextSet.has(line)) rem += 1;
+    let summary = 'Conteúdo do processo alterado';
+    if (neu && rem) summary = `Processo: +${neu} / -${rem} itens`;
+    else if (neu) summary = `Processo: +${neu} item(ns) novo(s)`;
+    else if (rem) summary = `Processo: ${rem} item(ns) removido(s)`;
+    return { summary, diffText: patch.slice(0, 12000) };
+  }
+
   let summary = 'Conteúdo alterado';
   if (added > 0) summary = `+${added} linhas detectadas`;
   else if (added < 0) summary = `${added} linhas detectadas`;
@@ -78,11 +97,136 @@ function scrubVolatileText(text) {
       .replace(/PESQUISA_PROCESSUAL\d+/gi, ' ')
       .replace(/\bhdn[A-Za-z0-9_]+\b/gi, ' ')
       .replace(/\b[a-f0-9]{32,}\b/gi, ' ')
-      .replace(/\b[A-Za-z0-9_-]{40,}\b/g, (m) => (/[0-9]/.test(m) && /[A-Za-z]/.test(m) ? ' ' : m))
+      .replace(/\b[A-Za-z0-9_+\/=-]{40,}\b/g, (m) =>
+        /[0-9]/.test(m) && /[A-Za-z]/.test(m) ? ' ' : m
+      )
       .replace(/Digite o c[oó]digo da imagem:?/gi, ' ')
+      .replace(/Informe o c[oó]digo de confirma[cç][aã]o:?/gi, ' ')
+      .replace(/\b\d{1,2}:\d{2}:\d{2}\b/g, (t) => t.slice(0, 5)) // drop seconds from times if present alone
       .replace(/&nbsp;/gi, ' ')
       .replace(/[ \t]{2,}/g, ' ')
   );
+}
+
+function cleanSeiCell(text) {
+  return scrubVolatileText(
+    String(text || '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+}
+
+function isSeiHeaderRow(cells) {
+  if (!cells.length) return true;
+  const joined = cells.join(' ').toLowerCase();
+  if (joined.length > 80) return false;
+  if (/\d{6,}/.test(joined) || /\d{2}\/\d{2}\/\d{4}/.test(joined)) return false;
+  return (
+    /^(tipo|unidade|data|descri|protocolo|documento|hora)/i.test(cells[0] || '') ||
+    /^(tipo do documento|data\/hora|descri[cç][aã]o|unidade|protocolo)(\s|$)/i.test(joined) ||
+    cells.every((c) =>
+      /^(tipo|unidade|data|data\/hora|descri[cç][aã]o|protocolo|documento|hora)s?$/i.test(c)
+    )
+  );
+}
+
+function looksLikeProtocolRow(cells) {
+  if (cells.length < 2) return false;
+  const id = cells[0] || '';
+  if (!/^\d{6,}$/.test(id.replace(/\D/g, '')) && !/^\d{6,}/.test(id)) {
+    // first cell may include icon text + id
+    if (!/\d{6,}/.test(cells.join(' '))) return false;
+  }
+  const blob = cells.join(' ');
+  return /(despacho|of[ií]cio|publica[cç][aã]o|anexo|externo|termo|informa[cç][aã]o|parecer|requerimento|memorando|e-mail|email)/i.test(
+    blob
+  ) || /\d{2}\/\d{2}\/\d{4}/.test(blob);
+}
+
+function looksLikeAndamentoRow(cells) {
+  if (cells.length < 2) return false;
+  const blob = cells.join(' ');
+  // Date/time in first cell is the strongest signal for SEI andamentos.
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(cells[0] || '') && cells.length >= 2) return true;
+  return /\d{2}\/\d{2}\/\d{4}/.test(blob) && /(processo|remetido|recebido|gerado|assinado)/i.test(blob);
+}
+
+function tableContextLabel($, tableEl) {
+  const $table = $(tableEl);
+  const bits = [];
+  const caption = cleanSeiCell($table.find('caption').first().text());
+  if (caption) bits.push(caption);
+  const prev = $table.prevAll('h1,h2,h3,h4,legend,div,p,span,strong,b,label').slice(0, 6);
+  prev.each((_, el) => {
+    const t = cleanSeiCell($(el).text());
+    if (t && t.length < 180) bits.push(t);
+  });
+  const firstRows = $table
+    .find('tr')
+    .slice(0, 2)
+    .map((_, tr) => cleanSeiCell($(tr).text()))
+    .get();
+  bits.push(...firstRows);
+  return bits.join(' | ');
+}
+
+function classifySeiTable($, tableEl) {
+  const label = tableContextLabel($, tableEl);
+  if (/lista de andamentos/i.test(label)) return 'andamentos';
+  if (/lista de protocolos/i.test(label)) return 'protocolos';
+
+  const rows = [];
+  $(tableEl)
+    .find('tr')
+    .each((_, tr) => {
+      const cells = $(tr)
+        .find('th,td')
+        .map((__, td) => cleanSeiCell($(td).text()))
+        .get()
+        .filter(Boolean);
+      if (cells.length) rows.push(cells);
+    });
+  if (rows.length < 2) return null;
+
+  let protocolHits = 0;
+  let andamentoHits = 0;
+  for (const cells of rows.slice(0, 12)) {
+    if (isSeiHeaderRow(cells)) continue;
+    if (looksLikeAndamentoRow(cells)) andamentoHits += 1;
+    else if (looksLikeProtocolRow(cells)) protocolHits += 1;
+  }
+  if (andamentoHits >= 2 && andamentoHits >= protocolHits) return 'andamentos';
+  if (protocolHits >= 2) return 'protocolos';
+  return null;
+}
+
+function serializeSeiTableRows($, tableEl, kind) {
+  const out = [];
+  const seen = new Set();
+  $(tableEl)
+    .find('tr')
+    .each((_, tr) => {
+      const cells = $(tr)
+        .find('th,td')
+        .map((__, td) => cleanSeiCell($(td).text()))
+        .get()
+        .filter(Boolean);
+      if (!cells.length || isSeiHeaderRow(cells)) return;
+      if (kind === 'protocolos' && !looksLikeProtocolRow(cells) && !/\d{6,}/.test(cells[0] || '')) {
+        return;
+      }
+      if (kind === 'andamentos' && !looksLikeAndamentoRow(cells) && !/\d{2}\/\d{2}\/\d{4}/.test(cells.join(' '))) {
+        return;
+      }
+      // Keep stable fields only: drop empty trailing noise, collapse.
+      const line = cells.join(' | ');
+      if (!line || line.length < 8) return;
+      if (seen.has(line)) return;
+      seen.add(line);
+      out.push(line);
+    });
+  return out;
 }
 
 /**
@@ -115,36 +259,52 @@ function extractSeiRelevantText(html) {
   $('img[src*="aptcha"], img[src*="Captcha"], img[id*="Captcha"], img[id*="captcha"]').each((_, el) => {
     $(el).closest('tr, div, label').first().remove();
   });
-  // Drop very small decorative tables; keep process lists.
+
+  const protocolos = [];
+  const andamentos = [];
+  const seenProtocol = new Set();
+  const seenAndamento = new Set();
+
   $('table').each((_, el) => {
-    const $el = $(el);
-    const sample = $el.text().replace(/\s+/g, ' ').trim();
-    if (/Digite o c[oó]digo|Informe o c[oó]digo de confirma/i.test(sample) && sample.length < 120) {
-      $el.remove();
+    const kind = classifySeiTable($, el);
+    if (!kind) return;
+    const rows = serializeSeiTableRows($, el, kind);
+    for (const row of rows) {
+      if (kind === 'protocolos') {
+        if (seenProtocol.has(row)) continue;
+        seenProtocol.add(row);
+        protocolos.push(row);
+      } else {
+        if (seenAndamento.has(row)) continue;
+        seenAndamento.add(row);
+        andamentos.push(row);
+      }
     }
   });
 
-  const chunks = [];
-  $('table').each((_, el) => {
-    const t = $(el).text();
-    if (
-      /Lista de Protocolos|Lista de Andamentos|Protocolo|Andamento|Documentos/i.test(t) &&
-      t.replace(/\s+/g, ' ').trim().length > 40
-    ) {
-      chunks.push(normalizeText(t));
-    }
-  });
-
-  if (chunks.length) {
-    return scrubVolatileText(chunks.join('\n\n'));
+  const parts = [];
+  if (protocolos.length) {
+    parts.push('[protocolos]');
+    parts.push(...protocolos);
+  }
+  if (andamentos.length) {
+    parts.push('[andamentos]');
+    parts.push(...andamentos);
   }
 
-  const body = $('body').length ? $('body') : $.root();
-  return scrubVolatileText(body.text());
+  // Never fall back to full body on SEI — that is the main source of false positives.
+  return scrubVolatileText(parts.join('\n'));
 }
 
 function extractHtmlText(html, selector, { pageUrl } = {}) {
-  if (!selector && pageUrl && isSeiUrl(pageUrl)) {
+  if (pageUrl && isSeiUrl(pageUrl)) {
+    if (!selector) return extractSeiRelevantText(html);
+    const $ = cheerio.load(html);
+    const root = $(selector);
+    if (root.length) {
+      const scoped = extractSeiRelevantText(`<div>${root.html() || ''}</div>`);
+      if (hasUsefulSeiContent(scoped)) return scoped;
+    }
     return extractSeiRelevantText(html);
   }
 
@@ -156,7 +316,7 @@ function extractHtmlText(html, selector, { pageUrl } = {}) {
   }
   const text = normalizeText(root.text());
   const raw = text || normalizeText($.root().text());
-  return pageUrl && isSeiUrl(pageUrl) ? scrubVolatileText(raw) : scrubVolatileText(raw);
+  return scrubVolatileText(raw);
 }
 
 function looksLikeSpaShell(html, text) {
@@ -393,9 +553,15 @@ export async function checkMonitor(id, { previousContent } = {}) {
       previousContent.length < 80 &&
       !previousContent.trim().startsWith('{');
     const switchedToApi = kind === 'json' && prevWasShell;
+    // Migrating SEI monitors to canonical protocolos/andamentos fingerprint — reset baseline quietly.
+    const switchedSeiFormat =
+      isSeiUrl(monitor.url) &&
+      /\[protocolos\]|\[andamentos\]/i.test(content || '') &&
+      Boolean(previousContent || monitor.lastContent) &&
+      !/\[protocolos\]|\[andamentos\]/i.test(previousContent || monitor.lastContent || '');
 
     const decision = resolveChangeState(monitor, hash, content, {
-      switchedToApi,
+      switchedToApi: switchedToApi || switchedSeiFormat,
       confirmations: isSeiUrl(monitor.url) ? SEI_CHANGE_CONFIRMATIONS : CHANGE_CONFIRMATIONS,
     });
     const { changed, isFirst } = decision;

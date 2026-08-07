@@ -5,13 +5,19 @@
 
 export function hasUsefulSeiContent(text) {
   const t = String(text || '');
-  if (t.length < 200) return false;
+  if (t.length < 80) return false;
+
+  if (/\[protocolos\]|\[andamentos\]/i.test(t)) {
+    const rows = t.split('\n').filter((l) => l.trim() && !/^\[[a-z]+\]$/i.test(l.trim()));
+    return rows.length >= 2;
+  }
+
   const hasLists = /lista de protocolos|lista de andamentos/i.test(t);
   const hasSignals =
     /(despacho|of[ií]cio|publica[cç][aã]o|anexo|externo|processo remetido|processo recebido|documento)/i.test(
       t
     );
-  return hasLists && hasSignals;
+  return hasLists && hasSignals && t.length >= 200;
 }
 
 export function isSeiCaptchaWall(html, text) {
@@ -22,7 +28,7 @@ export function isSeiCaptchaWall(html, text) {
     /informe o c[oó]digo de confirma[cç][aã]o/.test(blob) ||
     (/txtinfracaptcha/.test(blob) && /imgcaptcha/.test(blob));
   if (!captchaCopy) return false;
-  return !/lista de protocolos|lista de andamentos/i.test(text || '');
+  return !/lista de protocolos|lista de andamentos|\[protocolos\]|\[andamentos\]/i.test(text || '');
 }
 
 export function isSeiEmptyOrMissing(html, text) {
@@ -31,5 +37,5 @@ export function isSeiEmptyOrMissing(html, text) {
   const compact = String(text || '')
     .replace(/\s+/g, ' ')
     .trim();
-  return compact.length > 0 && compact.length < 60 && !hasUsefulSeiContent(text);
+  return (!compact || compact.length < 60) && !hasUsefulSeiContent(text);
 }
