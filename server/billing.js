@@ -253,26 +253,19 @@ export function getEffectiveMonitorLimit(user) {
   return trialMax;
 }
 
-/** Effective daily e-mail alert quota (trial uses Cobranças defaults). */
+/** Effective daily e-mail alert quota (trial uses Cobranças defaults when unset). */
 export function getEffectiveEmailDailyLimit(user) {
   if (!user) return 0;
-  const stored =
-    user.emailNotifyDailyLimit == null || Number.isNaN(Number(user.emailNotifyDailyLimit))
-      ? null
-      : Math.max(0, Number(user.emailNotifyDailyLimit));
-  if (user.role === 'admin') {
-    return stored ?? TRIAL_EMAIL_DAILY_LIMIT;
+  // Explicit per-user value from admin panel always wins.
+  if (user.emailNotifyDailyLimit != null && !Number.isNaN(Number(user.emailNotifyDailyLimit))) {
+    return Math.max(0, Number(user.emailNotifyDailyLimit));
   }
+  if (user.role === 'admin') return TRIAL_EMAIL_DAILY_LIMIT;
   const state = getBillingState(user);
-  // Admin-liberated accounts keep the limit set on the user (not trial cap).
-  if (user.emailNotifyAllowed === true && !hasPaidEmailPlan(user) && stored != null) {
-    return stored;
-  }
   if (state.status === 'trial' || state.source === 'trial') {
-    const trialLimit = getBillingConfig().trialEmailDailyLimit ?? TRIAL_EMAIL_DAILY_LIMIT;
-    return stored == null ? trialLimit : Math.min(stored, trialLimit);
+    return getBillingConfig().trialEmailDailyLimit ?? TRIAL_EMAIL_DAILY_LIMIT;
   }
-  return stored ?? TRIAL_EMAIL_DAILY_LIMIT;
+  return TRIAL_EMAIL_DAILY_LIMIT;
 }
 
 /** Defaults applied to new trial accounts (from Cobranças block). */

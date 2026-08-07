@@ -721,7 +721,7 @@ function renderUsers(users) {
             Ativar permanentemente (sem expiração de plano)
           </label>
           <div class="actions wrap">
-            <button type="button" class="btn small" data-action="save-limit">Salvar limite</button>
+            <button type="button" class="btn small" data-action="save-limit">Salvar limites</button>
             <button type="button" class="btn small" data-action="toggle">${u.active ? 'Desativar' : 'Ativar'}</button>
             <button type="button" class="btn small" data-action="password">Nova senha</button>
             <button type="button" class="btn small" data-action="reset-link">Copiar link</button>
@@ -1179,12 +1179,17 @@ els.usersList?.addEventListener('click', async (e) => {
   try {
     if (action === 'save-limit') {
       const maxMonitors = Number(card.querySelector('.max-monitors').value);
+      const emailNotifyDailyLimit = Number(card.querySelector('.email-daily-limit')?.value);
+      const body = { maxMonitors };
+      if (Number.isFinite(emailNotifyDailyLimit)) {
+        body.emailNotifyDailyLimit = emailNotifyDailyLimit;
+      }
       const data = await api(`/admin/users/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ maxMonitors }),
+        body: JSON.stringify(body),
       });
       if (data.user) applyAccountUser(data.user);
-      adminFlash(`Limite de sites de ${user.email} atualizado.`);
+      adminFlash(`Limites de ${user.email} atualizados.`);
     }
     if (action === 'save-email-limit') {
       const emailNotifyDailyLimit = Number(card.querySelector('.email-daily-limit').value);
