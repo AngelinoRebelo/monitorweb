@@ -158,9 +158,17 @@
             <section class="panel list-panel">
               <div class="section-head">
                 <h2>Monitores</h2>
+                <div class="monitor-filter" role="group" aria-label="Filtrar monitores">
+                  <button type="button" class="btn small monitor-filter-btn is-active" data-monitor-filter="all">
+                    Todos
+                  </button>
+                  <button type="button" class="btn small monitor-filter-btn" data-monitor-filter="favorites">
+                    Favoritos
+                  </button>
+                </div>
               </div>
               <p class="hint list-hint">
-                Ordenados pela última alteração. Clique no nome para ver o histórico.
+                Favoritos ficam no topo. Clique na estrela para marcar; no nome para ver o histórico.
               </p>
               <div id="monitors" class="cards"></div>
             </section>

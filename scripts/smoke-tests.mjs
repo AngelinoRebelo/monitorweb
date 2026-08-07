@@ -183,6 +183,47 @@ test('captcha sem tabelas é ignorado', () => {
 
 unlinkSync(exportPath);
 
+console.log('\n== Favoritos ==');
+{
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const favDir = mkdtempSync(join(tmpdir(), 'mw-fav-'));
+  process.env.DATA_DIR = favDir;
+  const db = await import(new URL(`../server/db.js?fav=${Date.now()}`, import.meta.url).href);
+
+  test('createMonitor inicia sem favorito e listMonitors prioriza favoritos', () => {
+    const a = db.createMonitor({
+      userId: 'u1',
+      name: 'A',
+      url: 'https://example.com/a',
+      intervalMinutes: 5,
+    });
+    const b = db.createMonitor({
+      userId: 'u1',
+      name: 'B',
+      url: 'https://example.com/b',
+      intervalMinutes: 5,
+    });
+    assert.equal(a.favorite, false);
+    assert.equal(b.favorite, false);
+    db.updateMonitor(a.id, {
+      favorite: true,
+      lastChangedAt: '2020-01-01T00:00:00.000Z',
+    });
+    db.updateMonitor(b.id, {
+      favorite: false,
+      lastChangedAt: '2026-01-01T00:00:00.000Z',
+    });
+    const listed = db.listMonitors({ userId: 'u1' });
+    assert.equal(listed[0].id, a.id);
+    assert.equal(listed[0].favorite, true);
+    assert.equal(listed[1].id, b.id);
+  });
+
+  rmSync(favDir, { recursive: true, force: true });
+}
+
 console.log('\n== Auth PATCH emailNotifyDailyLimit (unidade) ==');
 // Simulate normalize + effective limit path without writing disk
 test('Math path do PATCH mantém valor 10→25', () => {

@@ -96,6 +96,8 @@ export function listMonitors({ userId } = {}) {
   let monitors = read().monitors;
   if (userId) monitors = monitors.filter((m) => m.userId === userId);
   return monitors.sort((a, b) => {
+    const fav = Number(Boolean(b.favorite)) - Number(Boolean(a.favorite));
+    if (fav) return fav;
     const tb = Date.parse(b.lastChangedAt || '') || 0;
     const ta = Date.parse(a.lastChangedAt || '') || 0;
     if (tb !== ta) return tb - ta;
@@ -151,6 +153,7 @@ export function createMonitor({
     intervalMinutes: Math.max(1, Number(intervalMinutes) || 5),
     selector: (selector || '').trim(),
     enabled: Boolean(enabled),
+    favorite: false,
     lastCheckedAt: null,
     lastChangedAt: null,
     lastHash: null,

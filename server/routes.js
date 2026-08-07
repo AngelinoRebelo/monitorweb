@@ -196,6 +196,9 @@ router.patch('/monitors/:id', (req, res) => {
   if (patch.intervalMinutes != null) {
     patch.intervalMinutes = Math.max(1, Number(patch.intervalMinutes) || 5);
   }
+  if (patch.favorite != null) {
+    patch.favorite = Boolean(patch.favorite);
+  }
 
   const monitor = updateMonitor(req.params.id, patch);
   scheduleMonitor(monitor);

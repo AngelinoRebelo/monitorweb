@@ -96,6 +96,7 @@ const expandedIds = new Set();
 const expandedDashIds = new Set();
 const expandedAdminUserIds = new Set();
 const expandedBillingUserIds = new Set();
+let monitorFilter = 'all'; // 'all' | 'favorites'
 
 const VIEW_TITLES = {
   dashboard: 'Painel',
@@ -178,6 +179,8 @@ function ts(value) {
 
 function sortMonitors(monitors) {
   return [...monitors].sort((a, b) => {
+    const fav = Number(Boolean(b.favorite)) - Number(Boolean(a.favorite));
+    if (fav) return fav;
     const byChange = ts(b.lastChangedAt) - ts(a.lastChangedAt);
     if (byChange) return byChange;
     const byCheck = ts(b.lastCheckedAt) - ts(a.lastCheckedAt);
@@ -403,26 +406,48 @@ function renderEventItem(e) {
 function renderMonitors(monitors) {
   const ordered = sortMonitors(monitors);
   cachedMonitors = ordered;
+  const visible =
+    monitorFilter === 'favorites' ? ordered.filter((m) => m.favorite) : ordered;
+
+  document.querySelectorAll('[data-monitor-filter]').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.monitorFilter === monitorFilter);
+  });
+
   if (!ordered.length) {
     els.monitors.innerHTML = `<p class="empty">Nenhum monitor ainda. Adicione a primeira URL ao lado.</p>`;
     return;
   }
+  if (!visible.length) {
+    els.monitors.innerHTML = `<p class="empty">Nenhum favorito ainda. Clique na estrela de um monitor para marcar.</p>`;
+    return;
+  }
 
-  const showUpgradePromo = !hasPaidEmailAccess(currentUser) && ordered.length >= 2;
-  const cardsHtml = ordered
+  const showUpgradePromo = !hasPaidEmailAccess(currentUser) && visible.length >= 2;
+  const cardsHtml = visible
     .map((m, index) => {
       const open = expandedIds.has(m.id);
       const events = eventsForMonitor(m.id);
+      const fav = Boolean(m.favorite);
       const card = `
-      <article class="card accordion ${open ? 'is-open' : ''}" data-id="${m.id}">
-        <button type="button" class="accordion-trigger" data-action="toggle-expand" aria-expanded="${open}">
-          <span class="chevron" aria-hidden="true"></span>
-          <span class="accordion-title">
-            <strong>${escapeHtml(m.name)}</strong>
-            <span class="accordion-meta">${changesLabel(events.length)}</span>
-          </span>
-          <span class="status ${escapeAttr(m.lastStatus || 'pending')}">${statusLabel(m.lastStatus)}</span>
-        </button>
+      <article class="card accordion ${open ? 'is-open' : ''}${fav ? ' is-favorite' : ''}" data-id="${m.id}">
+        <div class="accordion-head">
+          <button
+            type="button"
+            class="fav-btn${fav ? ' is-on' : ''}"
+            data-action="favorite"
+            aria-pressed="${fav}"
+            title="${fav ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}"
+            aria-label="${fav ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}"
+          >★</button>
+          <button type="button" class="accordion-trigger" data-action="toggle-expand" aria-expanded="${open}">
+            <span class="chevron" aria-hidden="true"></span>
+            <span class="accordion-title">
+              <strong>${escapeHtml(m.name)}</strong>
+              <span class="accordion-meta">${changesLabel(events.length)}</span>
+            </span>
+            <span class="status ${escapeAttr(m.lastStatus || 'pending')}">${statusLabel(m.lastStatus)}</span>
+          </button>
+        </div>
 
         <div class="accordion-summary">
           <p class="meta"><a href="${escapeAttr(m.url)}" target="_blank" rel="noopener">${escapeHtml(m.url)}</a></p>
@@ -516,12 +541,16 @@ function renderDashboard() {
     .map((group) => {
       const open = expandedDashIds.has(group.id);
       const latest = group.events[0];
+      const mon = cachedMonitors.find((m) => m.id === group.id);
+      const favMark = mon?.favorite
+        ? '<span class="fav-mark" title="Favorito" aria-label="Favorito">★</span> '
+        : '';
       return `
-      <article class="card accordion dash-group ${open ? 'is-open' : ''}" data-dash-id="${escapeAttr(group.id)}">
+      <article class="card accordion dash-group ${open ? 'is-open' : ''}${mon?.favorite ? ' is-favorite' : ''}" data-dash-id="${escapeAttr(group.id)}">
         <button type="button" class="accordion-trigger" data-action="toggle-dash" aria-expanded="${open}">
           <span class="chevron" aria-hidden="true"></span>
           <span class="accordion-title">
-            <strong>${escapeHtml(group.name)}</strong>
+            <strong>${favMark}${escapeHtml(group.name)}</strong>
             <span class="accordion-meta">${changesLabel(group.events.length)} · última ${formatDate(latest?.createdAt)}</span>
           </span>
         </button>
@@ -1031,6 +1060,30 @@ els.monitors?.addEventListener('click', async (e) => {
     return;
   }
 
+  const favBtn = e.target.closest('[data-action="favorite"]');
+  if (favBtn) {
+    const id = favBtn.closest('.card')?.dataset.id;
+    if (!id) return;
+    const m = cachedMonitors.find((x) => x.id === id);
+    if (!m) return;
+    const next = !m.favorite;
+    favBtn.disabled = true;
+    try {
+      const updated = await api(`/monitors/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ favorite: next }),
+      });
+      const idx = cachedMonitors.findIndex((x) => x.id === id);
+      if (idx >= 0) cachedMonitors[idx] = { ...cachedMonitors[idx], ...updated, favorite: next };
+      renderMonitors(cachedMonitors);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      favBtn.disabled = false;
+    }
+    return;
+  }
+
   const diffBtn = e.target.closest('button[data-action="diff"]');
   if (diffBtn) {
     try {
@@ -1070,6 +1123,13 @@ els.monitors?.addEventListener('click', async (e) => {
   } finally {
     btn.disabled = false;
   }
+});
+
+document.querySelector('.list-panel')?.addEventListener('click', (e) => {
+  const filterBtn = e.target.closest('[data-monitor-filter]');
+  if (!filterBtn) return;
+  monitorFilter = filterBtn.dataset.monitorFilter === 'favorites' ? 'favorites' : 'all';
+  renderMonitors(cachedMonitors);
 });
 
 els.dashFeed?.addEventListener('click', async (e) => {

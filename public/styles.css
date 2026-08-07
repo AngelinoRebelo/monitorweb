@@ -1252,6 +1252,23 @@ input:focus {
   justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.monitor-filter {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.monitor-filter-btn {
+  opacity: 0.72;
+}
+
+.monitor-filter-btn.is-active {
+  opacity: 1;
+  border-color: rgba(212, 162, 76, 0.55);
+  color: var(--accent);
+  background: rgba(212, 162, 76, 0.12);
 }
 
 .pill {
@@ -1287,6 +1304,43 @@ input:focus {
   overflow: hidden;
 }
 
+.accordion-head {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+.fav-btn {
+  flex: 0 0 auto;
+  width: 2.6rem;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.28);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.fav-btn:hover {
+  color: var(--accent);
+  background: rgba(212, 162, 76, 0.08);
+}
+
+.fav-btn.is-on {
+  color: var(--accent);
+}
+
+.card.is-favorite {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.fav-mark {
+  color: var(--accent);
+  font-weight: 400;
+}
+
 .accordion-trigger {
   width: 100%;
   display: flex;
@@ -1301,8 +1355,10 @@ input:focus {
   cursor: pointer;
 }
 
-.accordion-trigger:hover {
-  background: rgba(255, 255, 255, 0.03);
+.accordion-head .accordion-trigger {
+  flex: 1;
+  min-width: 0;
+  width: auto;
 }
 
 .chevron {
