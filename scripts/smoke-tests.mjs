@@ -95,8 +95,9 @@ const seiHtml = `
 <div>Lista de Protocolos</div>
 <table>
 <tr><th>Protocolo</th><th>Tipo</th><th>Data</th><th>Unidade</th></tr>
-<tr><td>138456309</td><td>Despacho de Encaminhamento de Processo</td><td>06/08/2026</td><td>SEPPEN/CHEGAB</td></tr>
-<tr><td>138044041</td><td>Ofício - NA 133</td><td>05/08/2026</td><td>SEPPEN/ASSJUR</td></tr>
+<tr><td>138044041 <img src="/infra_css/imagens/chave.gif" alt="restrito" /></td><td>Despacho de Encaminhamento de Processo</td><td>05/08/2026</td><td>SEPPEN/ASSJUR</td></tr>
+<tr><td><a href="/sei/documento?id=138150689">138150689</a></td><td>Despacho de Encaminhamento de Processo</td><td>06/08/2026</td><td>SEPPEN/SUPRH</td></tr>
+<tr><td><a href="/sei/documento?id=138456309">138456309</a></td><td>Ofício - NA 133</td><td>06/08/2026</td><td>SEPPEN/CHEGAB</td></tr>
 </table>
 <div>Lista de Andamentos (28 registros):</div>
 <table>
@@ -120,12 +121,29 @@ const fpNewDoc = mon.extractSeiRelevantText(
     `<tr><td>139000001</td><td>Despacho de Encaminhamento de Processo</td><td>06/08/2026</td><td>SEPPEN/X</td></tr></table>\n<img`
   )
 );
+const seiLocked = seiHtml
+  .replace(
+    '<td><a href="/sei/documento?id=138150689">138150689</a></td>',
+    '<td>138150689 <img src="/infra_css/imagens/chave.gif" alt="restrito" /></td>'
+  )
+  .replace(
+    '<td><a href="/sei/documento?id=138456309">138456309</a></td>',
+    '<td>138456309</td>'
+  );
+const fpLocked = mon.extractSeiRelevantText(seiLocked);
+const fpLiberated = mon.extractSeiRelevantText(seiHtml);
 
 test('extrai protocolos e andamentos', () => {
   assert.match(fp1, /\[protocolos\]/);
   assert.match(fp1, /\[andamentos\]/);
   assert.match(fp1, /138456309/);
   assert.match(fp1, /Processo remetido/);
+});
+
+test('marca documentos com link como liberados e sem link como restritos', () => {
+  assert.match(fp1, /138150689 \| liberado \|/);
+  assert.match(fp1, /138456309 \| liberado \|/);
+  assert.match(fp1, /138044041 \| restrito \|/);
 });
 
 test('ignora segundos e tokens (sem falso positivo)', () => {
@@ -141,6 +159,14 @@ test('detecta mudança real de andamento', () => {
 test('detecta documento novo', () => {
   assert.notEqual(fp1, fpNewDoc);
   assert.match(mon.summarizeDiff(fp1, fpNewDoc).summary, /\+1/);
+});
+
+test('detecta liberação preto→azul (restrito→liberado)', () => {
+  assert.notEqual(fpLocked, fpLiberated);
+  assert.match(fpLocked, /138150689 \| restrito \|/);
+  assert.match(fpLiberated, /138150689 \| liberado \|/);
+  const summary = mon.summarizeDiff(fpLocked, fpLiberated).summary;
+  assert.match(summary, /liberado/i);
 });
 
 test('página com captcha + conteúdo útil não é bloqueada', () => {

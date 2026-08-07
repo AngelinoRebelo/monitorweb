@@ -51,8 +51,27 @@ function summarizeDiff(before, after) {
     let rem = 0;
     for (const line of nextSet) if (!prevSet.has(line)) neu += 1;
     for (const line of prevSet) if (!nextSet.has(line)) rem += 1;
+
+    const liberated = [];
+    for (const line of nextSet) {
+      const m = line.match(/^(\d{6,})\s*\|\s*liberado\b/i);
+      if (!m) continue;
+      const id = m[1];
+      const wasLocked = [...prevSet].some(
+        (l) =>
+          new RegExp(`^${id}\\s*\\|\\s*restrito\\b`, 'i').test(l) ||
+          (new RegExp(`^${id}\\b`).test(l) && !/\|\s*liberado\b/i.test(l))
+      );
+      if (wasLocked) liberated.push(id);
+    }
+
     let summary = 'Conteúdo do processo alterado';
-    if (neu && rem) summary = `Processo: +${neu} / -${rem} itens`;
+    if (liberated.length) {
+      summary =
+        liberated.length === 1
+          ? `Documento ${liberated[0]} liberado para acesso`
+          : `${liberated.length} documentos liberados para acesso`;
+    } else if (neu && rem) summary = `Processo: +${neu} / -${rem} itens`;
     else if (neu) summary = `Processo: +${neu} item(ns) novo(s)`;
     else if (rem) summary = `Processo: ${rem} item(ns) removido(s)`;
     return { summary, diffText: patch.slice(0, 12000) };
@@ -201,6 +220,29 @@ function classifySeiTable($, tableEl) {
   return null;
 }
 
+function protocolAccessState($, tr) {
+  const $tr = $(tr);
+  const $cells = $tr.find('th,td');
+  const $idCell = $cells.first();
+  // Blue/clickable protocol numbers are <a href> in SEI public research.
+  const linkedId = $tr
+    .find('a[href]')
+    .filter((_, a) => /\d{6,}/.test(cleanSeiCell($(a).text())))
+    .length;
+  if (linkedId > 0) return 'liberado';
+
+  const html = `${$idCell.html() || ''} ${$tr.html() || ''}`.toLowerCase();
+  const lockedIcon =
+    /chave|key|bloquead|restrit|cadeado|lock/.test(html) ||
+    $tr.find('img[src*="chave"], img[src*="key"], img[src*="bloque"], img[src*="restrit"], img[alt*="restrit"], img[title*="restrit"]').length >
+      0;
+  if (lockedIcon) return 'restrito';
+
+  // Plain text protocol id (no anchor) = not yet liberado for public access.
+  if (/\d{6,}/.test($idCell.text()) && $idCell.find('a[href]').length === 0) return 'restrito';
+  return 'indefinido';
+}
+
 function serializeSeiTableRows($, tableEl, kind) {
   const out = [];
   const seen = new Set();
@@ -219,8 +261,16 @@ function serializeSeiTableRows($, tableEl, kind) {
       if (kind === 'andamentos' && !looksLikeAndamentoRow(cells) && !/\d{2}\/\d{2}\/\d{4}/.test(cells.join(' '))) {
         return;
       }
-      // Keep stable fields only: drop empty trailing noise, collapse.
-      const line = cells.join(' | ');
+      let line = cells.join(' | ');
+      if (kind === 'protocolos') {
+        const access = protocolAccessState($, tr);
+        // Keep access state right after the protocol id so liberacao changes the fingerprint.
+        if (cells.length && /\d{6,}/.test(cells[0])) {
+          line = `${cells[0]} | ${access} | ${cells.slice(1).join(' | ')}`;
+        } else {
+          line = `${access} | ${line}`;
+        }
+      }
       if (!line || line.length < 8) return;
       if (seen.has(line)) return;
       seen.add(line);
@@ -554,14 +604,21 @@ export async function checkMonitor(id, { previousContent } = {}) {
       !previousContent.trim().startsWith('{');
     const switchedToApi = kind === 'json' && prevWasShell;
     // Migrating SEI monitors to canonical protocolos/andamentos fingerprint — reset baseline quietly.
+    const prevSei = previousContent || monitor.lastContent || '';
     const switchedSeiFormat =
       isSeiUrl(monitor.url) &&
       /\[protocolos\]|\[andamentos\]/i.test(content || '') &&
-      Boolean(previousContent || monitor.lastContent) &&
-      !/\[protocolos\]|\[andamentos\]/i.test(previousContent || monitor.lastContent || '');
+      Boolean(prevSei) &&
+      !/\[protocolos\]|\[andamentos\]/i.test(prevSei);
+    // Quietly adopt "liberado/restrito" markers without notifying (format upgrade).
+    const switchedSeiAccessFormat =
+      isSeiUrl(monitor.url) &&
+      /\|\s*(liberado|restrito)\s*\|/i.test(content || '') &&
+      /\[protocolos\]/i.test(prevSei) &&
+      !/\|\s*(liberado|restrito)\s*\|/i.test(prevSei);
 
     const decision = resolveChangeState(monitor, hash, content, {
-      switchedToApi: switchedToApi || switchedSeiFormat,
+      switchedToApi: switchedToApi || switchedSeiFormat || switchedSeiAccessFormat,
       confirmations: isSeiUrl(monitor.url) ? SEI_CHANGE_CONFIRMATIONS : CHANGE_CONFIRMATIONS,
     });
     const { changed, isFirst } = decision;
