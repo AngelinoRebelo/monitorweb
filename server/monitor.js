@@ -420,6 +420,118 @@ function discoverApiCandidates(pageUrl, html) {
   return [...new Set(candidates)];
 }
 
+/** Read firebaseConfig = { apiKey, projectId, ... } from inline SPA scripts. */
+function extractFirebaseConfig(html) {
+  const block = String(html || '').match(/firebaseConfig\s*=\s*\{([\s\S]*?)\}/);
+  if (!block) return null;
+  const body = block[1];
+  const apiKey = body.match(/apiKey\s*:\s*["']([^"']+)["']/i)?.[1] || '';
+  const projectId = body.match(/projectId\s*:\s*["']([^"']+)["']/i)?.[1] || '';
+  if (!projectId) return null;
+  return { apiKey, projectId };
+}
+
+/** collection(db, 'schedules') style references in Firebase client code. */
+function extractFirestoreCollections(html) {
+  const found = [];
+  const re = /collection\s*\(\s*[A-Za-z_$][\w$]*\s*,\s*['"]([^'"]+)['"]\s*\)/g;
+  let m;
+  while ((m = re.exec(String(html || '')))) {
+    if (m[1] && !found.includes(m[1])) found.push(m[1]);
+  }
+  return found;
+}
+
+function decodeFirestoreValue(value) {
+  if (value == null || typeof value !== 'object') return null;
+  if ('stringValue' in value) return value.stringValue;
+  if ('integerValue' in value) return Number(value.integerValue);
+  if ('doubleValue' in value) return Number(value.doubleValue);
+  if ('booleanValue' in value) return Boolean(value.booleanValue);
+  if ('nullValue' in value) return null;
+  if ('timestampValue' in value) return value.timestampValue;
+  if ('arrayValue' in value) {
+    return (value.arrayValue?.values || []).map(decodeFirestoreValue);
+  }
+  if ('mapValue' in value) {
+    const fields = value.mapValue?.fields || {};
+    const out = {};
+    for (const key of Object.keys(fields).sort()) {
+      out[key] = decodeFirestoreValue(fields[key]);
+    }
+    return out;
+  }
+  return null;
+}
+
+function firestoreDocumentsToPlain(documents) {
+  return (documents || [])
+    .map((doc) => {
+      const id = String(doc.name || '')
+        .split('/')
+        .pop();
+      const fields = doc.fields || {};
+      const data = { id };
+      for (const key of Object.keys(fields).sort()) {
+        data[key] = decodeFirestoreValue(fields[key]);
+      }
+      return data;
+    })
+    .filter((doc) => doc.id && !String(doc.id).startsWith('__'))
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+}
+
+function firestoreListUrl(projectId, collectionId, apiKey, pageToken) {
+  const path = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+    projectId
+  )}/databases/(default)/documents/${encodeURIComponent(collectionId)}`;
+  const qs = new URLSearchParams({ pageSize: '300' });
+  if (apiKey) qs.set('key', apiKey);
+  if (pageToken) qs.set('pageToken', pageToken);
+  return `${path}?${qs}`;
+}
+
+/**
+ * SPAs that render from Firestore (e.g. escala capoeira) keep a static HTML shell.
+ * Discover project/collections from the page and read the public REST API instead.
+ */
+async function tryFirebaseFirestoreFromHtml(html) {
+  const cfg = extractFirebaseConfig(html);
+  if (!cfg?.projectId) return null;
+  const collections = extractFirestoreCollections(html);
+  if (!collections.length) return null;
+
+  for (const collectionId of collections) {
+    try {
+      let pageToken = '';
+      const documents = [];
+      let sourceUrl = '';
+      for (let page = 0; page < 10; page += 1) {
+        const url = firestoreListUrl(cfg.projectId, collectionId, cfg.apiKey, pageToken || undefined);
+        if (!sourceUrl) sourceUrl = url.split('?')[0];
+        const res = await fetchResponse(url, { accept: 'application/json' });
+        if (!res.ok) break;
+        const body = await decodeResponseBody(res);
+        const data = JSON.parse(body);
+        if (Array.isArray(data.documents)) documents.push(...data.documents);
+        pageToken = data.nextPageToken || '';
+        if (!pageToken) break;
+      }
+      const plain = firestoreDocumentsToPlain(documents);
+      if (!plain.length) continue;
+      return {
+        sourceUrl,
+        content: formatJsonContent(plain),
+        kind: 'json',
+        collectionId,
+      };
+    } catch {
+      /* try next collection */
+    }
+  }
+  return null;
+}
+
 async function tryJsonSources(urls) {
   for (const url of urls) {
     try {
@@ -446,6 +558,14 @@ async function tryJsonSources(urls) {
 function summarizeRifaJson(content) {
   try {
     const data = JSON.parse(content);
+    if (Array.isArray(data) && data.some((d) => d && (d.scheduleName || d.weeks))) {
+      const schedules = data.filter((d) => d && (d.scheduleName || Array.isArray(d.weeks)));
+      const services = schedules.reduce(
+        (n, s) => n + (Array.isArray(s.weeks) ? s.weeks.reduce((w, week) => w + (week?.services?.length || 0), 0) : 0),
+        0
+      );
+      return `Escalas: ${schedules.length} mês(es), ${services} culto(s)`;
+    }
     const reservations = Array.isArray(data.reservations) ? data.reservations : [];
     const paid = reservations.filter((r) => r.status === 'paid').length;
     const reserved = reservations.filter((r) => r.status === 'reserved').length;
@@ -556,20 +676,27 @@ export async function checkMonitor(id, { previousContent } = {}) {
         content = formatJsonContent(JSON.parse(body));
         kind = 'json';
       } else {
-        const htmlText = extractHtmlText(body, monitor.selector, { pageUrl: monitor.url });
-        if (looksLikeSpaShell(body, htmlText) || htmlText.length < 80) {
-          const api = await tryJsonSources(discoverApiCandidates(monitor.url, body));
-          if (api) {
-            content = api.content;
-            sourceUrl = api.sourceUrl;
-            kind = 'json';
+        const firestore = await tryFirebaseFirestoreFromHtml(body);
+        if (firestore) {
+          content = firestore.content;
+          sourceUrl = firestore.sourceUrl;
+          kind = 'json';
+        } else {
+          const htmlText = extractHtmlText(body, monitor.selector, { pageUrl: monitor.url });
+          if (looksLikeSpaShell(body, htmlText) || htmlText.length < 80) {
+            const api = await tryJsonSources(discoverApiCandidates(monitor.url, body));
+            if (api) {
+              content = api.content;
+              sourceUrl = api.sourceUrl;
+              kind = 'json';
+            } else {
+              content = htmlText;
+              kind = 'html-shell';
+            }
           } else {
             content = htmlText;
-            kind = 'html-shell';
+            kind = 'html';
           }
-        } else {
-          content = htmlText;
-          kind = 'html';
         }
       }
     }
@@ -597,12 +724,18 @@ export async function checkMonitor(id, { previousContent } = {}) {
     }
 
     const hash = hashContent(content);
+    const prevContent = previousContent || monitor.lastContent || '';
     const prevWasShell =
-      previousContent != null &&
-      previousContent.length > 0 &&
-      previousContent.length < 80 &&
-      !previousContent.trim().startsWith('{');
-    const switchedToApi = kind === 'json' && prevWasShell;
+      prevContent.length > 0 &&
+      prevContent.length < 80 &&
+      !/^\s*[\[{]/.test(prevContent);
+    // Quietly adopt JSON/Firestore data when upgrading from static HTML fingerprint.
+    const switchedFromHtmlToJson =
+      kind === 'json' &&
+      Boolean(monitor.lastHash) &&
+      prevContent.length > 0 &&
+      !/^\s*[\[{]/.test(prevContent);
+    const switchedToApi = (kind === 'json' && prevWasShell) || switchedFromHtmlToJson;
     // Migrating SEI monitors to canonical protocolos/andamentos fingerprint — reset baseline quietly.
     const prevSei = previousContent || monitor.lastContent || '';
     const switchedSeiFormat =

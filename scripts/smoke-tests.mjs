@@ -83,10 +83,14 @@ const exportPath = fileURLToPath(new URL('../server/_smoke_export.mjs', import.m
 const src = readFileSync(monitorPath, 'utf8');
 writeFileSync(
   exportPath,
-  src.replace(
-    'export async function checkMonitor',
-    'export { extractSeiRelevantText, summarizeDiff, detectUnusableCapture, hashContent };\nexport async function checkMonitor'
-  )
+  src
+    .replace(/\nfunction extractFirebaseConfig/, '\nexport function extractFirebaseConfig')
+    .replace(/\nfunction extractFirestoreCollections/, '\nexport function extractFirestoreCollections')
+    .replace(/\nfunction firestoreDocumentsToPlain/, '\nexport function firestoreDocumentsToPlain')
+    .replace(
+      'export async function checkMonitor',
+      'export { extractSeiRelevantText, summarizeDiff, detectUnusableCapture, hashContent };\nexport async function checkMonitor'
+    )
 );
 const mon = await import(pathToFileURL(exportPath).href + `?t=${Date.now()}`);
 
@@ -182,6 +186,70 @@ test('captcha sem tabelas é ignorado', () => {
 });
 
 unlinkSync(exportPath);
+
+console.log('\n== Firebase / Firestore (SPA shell) ==');
+test('extrai config e coleções do HTML inline', () => {
+  const html = `
+    <script type="module">
+      const firebaseConfig = {
+        apiKey: "AIzaSyTestKey",
+        projectId: "escala-demo",
+      };
+      const schedulesCollection = collection(db, 'schedules');
+      const other = collection(db, "meta");
+    </script>`;
+  assert.deepEqual(mon.extractFirebaseConfig(html), {
+    apiKey: 'AIzaSyTestKey',
+    projectId: 'escala-demo',
+  });
+  assert.deepEqual(mon.extractFirestoreCollections(html), ['schedules', 'meta']);
+});
+
+test('normaliza documentos Firestore para fingerprint estável', () => {
+  const plain = mon.firestoreDocumentsToPlain([
+    {
+      name: 'projects/x/databases/(default)/documents/schedules/2026-08',
+      fields: {
+        scheduleName: { stringValue: 'Agosto' },
+        weeks: {
+          arrayValue: {
+            values: [
+              {
+                mapValue: {
+                  fields: {
+                    weekName: { stringValue: 'S1' },
+                    services: {
+                      arrayValue: {
+                        values: [
+                          {
+                            mapValue: {
+                              fields: {
+                                day: { stringValue: 'SEXTA' },
+                                preleitor: { stringValue: 'A' },
+                              },
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+    },
+    {
+      name: 'projects/x/databases/(default)/documents/schedules/__staffNames__',
+      fields: { names: { arrayValue: { values: [{ stringValue: 'X' }] } } },
+    },
+  ]);
+  assert.equal(plain.length, 1);
+  assert.equal(plain[0].id, '2026-08');
+  assert.equal(plain[0].scheduleName, 'Agosto');
+  assert.equal(plain[0].weeks[0].services[0].preleitor, 'A');
+});
 
 console.log('\n== Favoritos ==');
 {
