@@ -358,13 +358,101 @@ function updateNotifyUi() {
   if (els.notifyStatus) {
     els.notifyStatus.textContent = `Permissão do navegador: ${map[perm] || perm}`;
   }
-  els.btnNotify.textContent =
-    perm === 'granted' ? 'Alertas ativos' : 'Ativar alertas';
+  if (els.btnNotify) {
+    const on = perm === 'granted' || nativeNotifyReady;
+    els.btnNotify.textContent = on ? 'Alertas ON' : 'Alertas';
+    els.btnNotify.classList.toggle('is-live', on);
+  }
+}
+
+function isNativeApp() {
+  try {
+    return Boolean(window.Capacitor?.isNativePlatform?.());
+  } catch {
+    return false;
+  }
+}
+
+function nativeLocalNotifications() {
+  return window.Capacitor?.Plugins?.LocalNotifications || null;
+}
+
+let nativeNotifyReady = false;
+
+async function ensureNativeNotifyChannel() {
+  const LN = nativeLocalNotifications();
+  if (!LN?.createChannel) return;
+  try {
+    await LN.createChannel({
+      id: 'monitorweb-alerts',
+      name: 'Alertas MonitorWeb',
+      description: 'Mudanças detectadas nos monitores',
+      importance: 5,
+      visibility: 1,
+      sound: 'default',
+      vibration: true,
+    });
+  } catch {
+    /* channel may already exist */
+  }
+}
+
+async function enableNativeNotifications() {
+  const LN = nativeLocalNotifications();
+  if (!LN) return false;
+  try {
+    await ensureNativeNotifyChannel();
+    const current = await LN.checkPermissions();
+    let state = current?.display || current?.receive || 'prompt';
+    if (state !== 'granted') {
+      const req = await LN.requestPermissions();
+      state = req?.display || req?.receive || state;
+    }
+    nativeNotifyReady = state === 'granted';
+    updateNotifyUi();
+    return nativeNotifyReady;
+  } catch (err) {
+    console.warn('[notify] native permission failed', err);
+    return false;
+  }
+}
+
+async function showNativeLocalNotification(payload) {
+  const LN = nativeLocalNotifications();
+  if (!LN || !browserNotifyEnabled) return false;
+  try {
+    if (!nativeNotifyReady) {
+      const ok = await enableNativeNotifications();
+      if (!ok) return false;
+    }
+    await ensureNativeNotifyChannel();
+    const id = Math.floor(Date.now() % 100000);
+    await LN.schedule({
+      notifications: [
+        {
+          id,
+          title: payload.title || 'MonitorWeb',
+          body: payload.body || 'Mudança detectada',
+          channelId: 'monitorweb-alerts',
+          extra: { url: payload.url || '/' },
+          schedule: { at: new Date(Date.now() + 250) },
+        },
+      ],
+    });
+    return true;
+  } catch (err) {
+    console.warn('[notify] local schedule failed', err);
+    return false;
+  }
 }
 
 async function enableBrowserNotifications() {
+  if (isNativeApp()) {
+    const nativeOk = await enableNativeNotifications();
+    if (nativeOk) return true;
+  }
   if (!('Notification' in window)) {
-    alert('Este navegador não suporta notificações.');
+    if (!isNativeApp()) alert('Este navegador não suporta notificações.');
     return false;
   }
   const perm = await Notification.requestPermission();
@@ -374,11 +462,17 @@ async function enableBrowserNotifications() {
 
 function showBrowserNotification(payload) {
   if (!browserNotifyEnabled) return;
+
+  if (isNativeApp()) {
+    void showNativeLocalNotification(payload);
+  }
+
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
   const n = new Notification(payload.title || 'MonitorWeb', {
     body: payload.body || 'Mudança detectada',
-    icon: '/icon.svg',
+    icon: '/icon.png',
+    badge: '/icon.png',
     tag: payload.event?.id || payload.monitor?.id || 'monitorweb',
     data: { url: payload.url },
   });
@@ -387,6 +481,31 @@ function showBrowserNotification(payload) {
     if (payload.url) window.open(payload.url, '_blank');
     n.close();
   };
+}
+
+function bootMobileAppChrome() {
+  const native = isNativeApp();
+  document.body.classList.toggle('is-native-app', native);
+  document.body.classList.toggle('is-web-app', !native);
+  const narrow = window.matchMedia('(max-width: 900px)');
+  const syncNarrow = () => document.body.classList.toggle('is-mobile-layout', narrow.matches);
+  syncNarrow();
+  narrow.addEventListener?.('change', syncNarrow);
+  if (native) {
+    void enableNativeNotifications();
+    const LN = nativeLocalNotifications();
+    LN?.addListener?.('localNotificationActionPerformed', (event) => {
+      const url = event?.notification?.extra?.url;
+      if (url) {
+        try {
+          window.open(url, '_blank');
+        } catch {
+          /* ignore */
+        }
+      }
+      setView('dashboard');
+    });
+  }
 }
 
 function renderEventItem(e) {
@@ -2181,6 +2300,7 @@ els.btnLogout?.addEventListener('click', async () => {
 });
 
 updateNotifyUi();
+bootMobileAppChrome();
 
 (async () => {
   try {

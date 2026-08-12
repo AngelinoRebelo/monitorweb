@@ -3,8 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="google" content="notranslate" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0f2f24" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="description" content="MonitorWeb — monitore mudanças em páginas e receba notificações" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
@@ -23,30 +26,53 @@
 
     <div class="app-shell">
       <aside class="sidebar" aria-label="Navegação">
-        <div class="sidebar-brand">
-          <span class="mark mark-img" aria-hidden="true">
-            <img src="/icon.svg" alt="" width="40" height="40" />
-          </span>
-          <div>
-            <p class="brand-name">MonitorWeb</p>
-            <p class="brand-sub">vigilância · alertas</p>
+        <div class="sidebar-top">
+          <div class="sidebar-brand">
+            <span class="mark mark-img" aria-hidden="true">
+              <img src="/icon.svg" alt="" width="40" height="40" />
+            </span>
+            <div class="brand-copy">
+              <p class="brand-name">MonitorWeb</p>
+              <p class="brand-sub">vigilância · alertas</p>
+            </div>
+          </div>
+
+          <div class="account-actions" aria-label="Conta">
+            <span id="user-email" class="user-email" hidden></span>
+            <div class="account-btns">
+              <button type="button" id="btn-notify" class="btn ghost side-btn btn-compact">
+                Alertas
+              </button>
+              <button type="button" id="btn-install" class="btn ghost side-btn btn-compact hidden">
+                Instalar
+              </button>
+              <button type="button" id="btn-logout" class="btn ghost side-btn btn-compact">Sair</button>
+            </div>
           </div>
         </div>
 
-        <nav class="side-nav">
-          <button type="button" class="side-link is-active" data-view="dashboard">Painel</button>
-          <button type="button" class="side-link" data-view="monitors">Monitores</button>
-          <button type="button" class="side-link" data-view="billing">Planos</button>
-          <button type="button" class="side-link hidden" data-view="admin" id="nav-admin">Admin</button>
-          <button type="button" class="side-link hidden" data-view="billing-admin" id="nav-billing">Cobranças</button>
+        <nav class="side-nav" aria-label="Seções">
+          <button type="button" class="side-link is-active" data-view="dashboard">
+            <span class="nav-ico" aria-hidden="true"></span>
+            <span class="nav-label">Painel</span>
+          </button>
+          <button type="button" class="side-link" data-view="monitors">
+            <span class="nav-ico" aria-hidden="true"></span>
+            <span class="nav-label">Monitores</span>
+          </button>
+          <button type="button" class="side-link" data-view="billing">
+            <span class="nav-ico" aria-hidden="true"></span>
+            <span class="nav-label">Planos</span>
+          </button>
+          <button type="button" class="side-link hidden" data-view="admin" id="nav-admin">
+            <span class="nav-ico" aria-hidden="true"></span>
+            <span class="nav-label">Admin</span>
+          </button>
+          <button type="button" class="side-link hidden" data-view="billing-admin" id="nav-billing">
+            <span class="nav-ico" aria-hidden="true"></span>
+            <span class="nav-label">Cobranças</span>
+          </button>
         </nav>
-
-        <div class="sidebar-foot">
-          <span id="user-email" class="user-email" hidden></span>
-          <button type="button" id="btn-notify" class="btn ghost side-btn">Ativar notificações</button>
-          <button type="button" id="btn-install" class="btn ghost side-btn hidden">Instalar no PC</button>
-          <button type="button" id="btn-logout" class="btn ghost side-btn">Sair</button>
-        </div>
       </aside>
 
       <div class="app-main">
