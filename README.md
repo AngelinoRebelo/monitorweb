@@ -25,6 +25,14 @@ Abra http://localhost:3000
 
 Casca Capacitor em [`mobile/`](mobile/) — **não altera** a web. Abre a URL do MonitorWeb no WebView.
 
+Em máquina com **~8 GB de RAM**, use o modo leve (não sobe o emulador junto):
+
+```bash
+mobile/scripts/studio-light.sh
+```
+
+Ou o fluxo completo:
+
 ```bash
 cd mobile
 npm install
@@ -33,6 +41,8 @@ npm run prepare:prod   # Railway
 npx cap add android    # só na primeira vez
 npm run open           # Android Studio
 ```
+
+**Dica de performance:** no PC com pouca RAM, teste no **celular USB** em vez do emulador; Studio + emulador + Chrome/Cursor costuma estourar memória.
 
 Detalhes, keystore e publicação: [`mobile/README.md`](mobile/README.md).
 

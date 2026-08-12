@@ -9,6 +9,23 @@ Casca nativa para testar e, depois, publicar na Play Store.
 - [Android Studio](https://developer.android.com/studio) (SDK + emulador ou aparelho USB com depuração)
 - JDK 17 (vem com o Android Studio)
 
+## Performance (~8 GB RAM)
+
+O emulador Android costuma consumir **2 GB+**. Neste PC, preferir:
+
+1. Fechar o emulador quando não estiver testando (`pkill -f qemu-system-x86_64`)
+2. Abrir o Studio pelo modo leve:
+
+```bash
+./scripts/studio-light.sh
+```
+
+3. Testar no **celular físico** (USB + depuração USB) em vez do AVD
+4. Heap do Studio limitado a ~1,25 GB (`~/.config/Google/AndroidStudio*/studio64.vmoptions`)
+5. Gradle limitado a 1 GB / 2 workers (`android/gradle.properties`)
+
+O AVD `MonitorWeb_API35` foi ajustado para **1536 MB RAM** e **2 cores**.
+
 ## Setup (uma vez)
 
 ```bash
