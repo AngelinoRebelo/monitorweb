@@ -1491,26 +1491,33 @@ function renderPlans(plans) {
       const maxSites = Number(p.maxMonitors) || 100;
       const features = Array.isArray(p.features) && p.features.length
         ? p.features
-        : ['Alertas por e-mail', `Até ${maxSites} sites para monitoramento`];
+        : ['Alertas por e-mail', `Até ${maxSites} sites`];
       const checkoutLocked = isActive;
+      const featureLine = features.map((f) => escapeHtml(f)).join(' · ');
       return `
-    <article class="plan-card${isActive ? ' is-active' : ''}" data-plan-id="${escapeHtml(p.id)}">
+    <article class="plan-card plan-row${isActive ? ' is-active' : ''}" data-plan-id="${escapeHtml(p.id)}">
       ${isActive ? `<span class="plan-seal" title="Assinatura vigente">Ativo</span>` : ''}
-      <h3>${escapeHtml(p.label)}</h3>
-      <p class="plan-price">R$ ${Number(p.price).toFixed(0)} <span>/ ${Number(p.days)} dia(s)</span></p>
-      <ul class="plan-features">
-        ${features.map((f) => `<li>${escapeHtml(f)}</li>`).join('')}
-      </ul>
-      <p class="hint">${
-        isActive
-          ? `Assinatura vigente${billing.expiresAt ? ` até ${formatDate(billing.expiresAt)}` : ''}. Novo pagamento só após o vencimento.`
-          : `Trial: até ${cachedTrialMaxMonitors} sites. Planos pagos: até 100 sites.`
-      }</p>
-      <button type="button" class="btn primary" data-action="checkout" data-plan-id="${escapeHtml(p.id)}"${
-        checkoutLocked ? ' disabled aria-disabled="true"' : ''
-      }>
-        ${checkoutLocked ? 'Plano ativo' : 'Pagar'}
-      </button>
+      <div class="plan-cell plan-cell-name">
+        <h3>${escapeHtml(p.label)}</h3>
+        <p class="plan-mini-hint">${
+          isActive
+            ? `Vigente${billing.expiresAt ? ` até ${formatDate(billing.expiresAt)}` : ''}`
+            : `Trial até ${cachedTrialMaxMonitors} sites`
+        }</p>
+      </div>
+      <div class="plan-cell plan-cell-price">
+        <p class="plan-price">R$ ${Number(p.price).toFixed(0)} <span>/ ${Number(p.days)}d</span></p>
+      </div>
+      <div class="plan-cell plan-cell-features">
+        <p class="plan-features-line">${featureLine}</p>
+      </div>
+      <div class="plan-cell plan-cell-action">
+        <button type="button" class="btn primary btn-compact" data-action="checkout" data-plan-id="${escapeHtml(p.id)}"${
+          checkoutLocked ? ' disabled aria-disabled="true"' : ''
+        }>
+          ${checkoutLocked ? 'Ativo' : 'Pagar'}
+        </button>
+      </div>
     </article>`;
     })
     .join('');

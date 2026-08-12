@@ -92,12 +92,12 @@
 
         <section id="view-monitors" class="view">
           <div class="layout">
-            <section class="panel form-panel">
+            <section class="panel form-panel form-panel-compact">
               <h2>Novo monitor</h2>
-              <p class="lead">
-                Informe a URL e o intervalo. Em sites SPA, o MonitorWeb detecta a API automaticamente.
+              <p class="lead form-lead-short">
+                URL + intervalo. SPA/API detectados automaticamente.
               </p>
-              <form id="monitor-form">
+              <form id="monitor-form" class="monitor-form-compact">
                 <label>
                   Nome
                   <input id="name" name="name" type="text" placeholder="Ex.: DOERJ — capa" />
@@ -113,19 +113,19 @@
                   </label>
                   <label>
                     Seletor CSS (opcional)
-                    <input id="selector" name="selector" type="text" placeholder="#conteudo, .main, article" />
+                    <input id="selector" name="selector" type="text" placeholder="#conteudo, .main" />
                   </label>
                 </div>
                 <div class="selector-tools">
-                  <button type="button" id="btn-pick-region" class="btn ghost">
-                    Selecionar parte da página
+                  <button type="button" id="btn-pick-region" class="btn ghost btn-compact">
+                    Selecionar parte
                   </button>
-                  <button type="button" id="btn-clear-selector" class="btn ghost">
+                  <button type="button" id="btn-clear-selector" class="btn ghost btn-compact">
                     Página inteira
                   </button>
                 </div>
                 <p id="selector-hint" class="hint">
-                  Sem seletor, monitora a página toda (no SEI, andamentos/protocolos).
+                  Sem seletor: página toda (SEI: andamentos/protocolos).
                 </p>
                 <label class="check">
                   <input id="enabled" name="enabled" type="checkbox" checked />

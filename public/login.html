@@ -100,7 +100,7 @@
         </article>
       </section>
 
-      <section class="auth-card panel">
+      <section class="auth-card panel is-collapsed" id="auth-card">
         <div class="brand auth-brand auth-brand-compact">
           <span class="mark mark-img" aria-hidden="true">
             <img src="/icon.svg" alt="" width="40" height="40" />
@@ -111,11 +111,10 @@
           </div>
         </div>
 
-        <h2 id="auth-title">Entrar</h2>
-        <p class="lead" id="auth-lead">Use seu e-mail e senha para acessar o painel.</p>
+        <p class="auth-prompt" id="auth-prompt">Escolha uma opção para continuar</p>
 
         <div class="auth-tabs" role="tablist">
-          <button type="button" class="auth-tab is-active" data-mode="login" role="tab" aria-selected="true">
+          <button type="button" class="auth-tab" data-mode="login" role="tab" aria-selected="false">
             Entrar
           </button>
           <button type="button" class="auth-tab" data-mode="register" role="tab" aria-selected="false" id="tab-register">
@@ -126,42 +125,47 @@
           </button>
         </div>
 
-        <form id="auth-form" autocomplete="on">
-          <label>
-            E-mail
-            <input id="email" name="email" type="email" required autocomplete="username" placeholder="voce@email.com" />
-          </label>
-          <label id="password-field">
-            Senha
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              minlength="8"
-              autocomplete="current-password"
-              placeholder="mínimo 8 caracteres"
-            />
-          </label>
-          <p id="auth-error" class="auth-error" hidden></p>
-          <p id="auth-ok" class="hint" hidden></p>
-          <div id="auth-paywall" class="auth-paywall" hidden>
-            <p id="auth-paywall-msg" class="auth-error">
-              Sua conta está bloqueada. É necessário pagar um plano para acessar novamente.
-            </p>
-            <a id="auth-paywall-btn" class="btn primary" href="/#billing">Ir para pagamento</a>
-          </div>
-          <button type="submit" class="btn primary" id="auth-submit">Entrar</button>
-        </form>
+        <div class="auth-panel" id="auth-panel" hidden>
+          <h2 id="auth-title">Entrar</h2>
+          <p class="lead" id="auth-lead">Use seu e-mail e senha para acessar o painel.</p>
 
-        <p class="hint" id="register-hint">
-          Crie sua conta para cadastrar e acompanhar seus próprios sites. Cada usuário vê só os
-          monitores dele.
-        </p>
-        <p class="hint" id="forgot-hint" hidden>
-          Enviaremos um link de redefinição para o e-mail da conta. Se o envio falhar, o administrador
-          ainda pode gerar o link no painel Admin.
-        </p>
+          <form id="auth-form" autocomplete="on">
+            <label>
+              E-mail
+              <input id="email" name="email" type="email" required autocomplete="username" placeholder="voce@email.com" />
+            </label>
+            <label id="password-field">
+              Senha
+              <input
+                id="password"
+                name="password"
+                type="password"
+                required
+                minlength="8"
+                autocomplete="current-password"
+                placeholder="mínimo 8 caracteres"
+              />
+            </label>
+            <p id="auth-error" class="auth-error" hidden></p>
+            <p id="auth-ok" class="hint" hidden></p>
+            <div id="auth-paywall" class="auth-paywall" hidden>
+              <p id="auth-paywall-msg" class="auth-error">
+                Sua conta está bloqueada. É necessário pagar um plano para acessar novamente.
+              </p>
+              <a id="auth-paywall-btn" class="btn primary" href="/#billing">Ir para pagamento</a>
+            </div>
+            <button type="submit" class="btn primary" id="auth-submit">Entrar</button>
+          </form>
+
+          <p class="hint" id="register-hint" hidden>
+            Crie sua conta para cadastrar e acompanhar seus próprios sites. Cada usuário vê só os
+            monitores dele.
+          </p>
+          <p class="hint" id="forgot-hint" hidden>
+            Enviaremos um link de redefinição para o e-mail da conta. Se o envio falhar, o administrador
+            ainda pode gerar o link no painel Admin.
+          </p>
+        </div>
       </section>
     </main>
 

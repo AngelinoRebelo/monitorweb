@@ -111,6 +111,12 @@ body {
   gap: 0.4rem;
 }
 
+.btn-compact {
+  padding: 0.42rem 0.7rem;
+  font-size: 0.8rem;
+  border-radius: 10px;
+}
+
 .btn-compact.is-live {
   border-color: rgba(93, 202, 160, 0.55);
   color: var(--ok);
@@ -400,9 +406,9 @@ body {
 
 .plans-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.85rem;
-  margin-top: 1rem;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
 }
 
 .plan-card {
@@ -415,6 +421,58 @@ body {
   background: rgba(0, 0, 0, 0.18);
 }
 
+.plan-card.plan-row {
+  grid-template-columns: minmax(6.5rem, 1.1fr) minmax(5rem, 0.75fr) minmax(0, 2fr) auto;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 12px;
+}
+
+.plan-cell {
+  min-width: 0;
+}
+
+.plan-cell-name h3 {
+  margin: 0;
+  font-size: 1rem;
+  padding-right: 0;
+  line-height: 1.2;
+}
+
+.plan-mini-hint {
+  margin: 0.12rem 0 0;
+  font-size: 0.7rem;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.plan-cell-price .plan-price {
+  margin: 0;
+  font-size: 1.25rem;
+  line-height: 1.1;
+}
+
+.plan-features-line {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink);
+  line-height: 1.3;
+  opacity: 0.92;
+}
+
+.plan-cell-action {
+  justify-self: end;
+}
+
+.plan-cell-action .btn {
+  margin: 0;
+  width: auto;
+  min-width: 4.25rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.82rem;
+}
+
 .plan-card.is-active {
   border-color: rgba(212, 162, 76, 0.7);
   box-shadow: 0 0 0 1px rgba(212, 162, 76, 0.28), 0 10px 28px rgba(0, 0, 0, 0.22);
@@ -425,18 +483,18 @@ body {
 
 .plan-seal {
   position: absolute;
-  top: 0.7rem;
-  right: 0.7rem;
+  top: 0.4rem;
+  right: 0.45rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 3.4rem;
-  padding: 0.28rem 0.55rem;
+  min-width: 2.8rem;
+  padding: 0.15rem 0.4rem;
   border-radius: 999px;
   border: 1px solid rgba(212, 162, 76, 0.55);
   background: rgba(212, 162, 76, 0.92);
   color: #1a1206;
-  font-size: 0.72rem;
+  font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -786,6 +844,41 @@ body {
   .billing-admin-grid,
   .plan-admin-row {
     grid-template-columns: 1fr;
+  }
+
+  .plan-card.plan-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name action'
+      'price action'
+      'features features';
+    gap: 0.25rem 0.65rem;
+    padding: 0.65rem 0.75rem;
+  }
+
+  .plan-cell-name {
+    grid-area: name;
+  }
+
+  .plan-cell-price {
+    grid-area: price;
+  }
+
+  .plan-cell-features {
+    grid-area: features;
+  }
+
+  .plan-cell-action {
+    grid-area: action;
+    align-self: center;
+  }
+
+  .plan-cell-price .plan-price {
+    font-size: 1.15rem;
+  }
+
+  .plan-features-line {
+    font-size: 0.74rem;
   }
 }
 
@@ -1156,6 +1249,65 @@ body {
 .form-panel {
   grid-area: form;
 }
+
+.form-panel-compact {
+  padding: 0.85rem 0.9rem 1rem;
+}
+
+.form-panel-compact h2 {
+  margin: 0 0 0.2rem;
+  font-size: 1.2rem;
+}
+
+.form-lead-short {
+  margin: 0 0 0.65rem;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.monitor-form-compact {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.monitor-form-compact label {
+  gap: 0.22rem;
+  font-size: 0.75rem;
+}
+
+.monitor-form-compact input[type='text'],
+.monitor-form-compact input[type='url'],
+.monitor-form-compact input[type='number'] {
+  padding: 0.48rem 0.7rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+
+.monitor-form-compact .row {
+  gap: 0.5rem;
+}
+
+.monitor-form-compact .selector-tools {
+  gap: 0.35rem;
+  margin-top: 0.05rem;
+}
+
+.monitor-form-compact .hint {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.monitor-form-compact .check {
+  margin: 0.1rem 0;
+  font-size: 0.82rem;
+}
+
+.monitor-form-compact > .btn.primary {
+  margin-top: 0.15rem;
+  padding: 0.55rem 0.9rem;
+}
+
 .list-panel {
   grid-area: list;
 }
@@ -2189,6 +2341,28 @@ dialog::backdrop {
   animation: authRise 0.75s ease 0.08s both;
 }
 
+.auth-card.is-collapsed {
+  width: min(360px, 100%);
+  padding: 1rem 1.05rem 1.1rem;
+  gap: 0.65rem;
+}
+
+.auth-prompt {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.auth-panel {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.auth-panel[hidden] {
+  display: none !important;
+}
+
 .auth-brand {
   margin-bottom: 0.25rem;
 }
@@ -2197,12 +2371,30 @@ dialog::backdrop {
   font-size: 1.25rem;
 }
 
+.auth-card.is-collapsed .auth-brand-compact .brand-name {
+  font-size: 1.05rem;
+}
+
+.auth-card.is-collapsed .auth-brand-compact .brand-sub {
+  font-size: 0.72rem;
+}
+
 .auth-card h1,
 .auth-card h2#auth-title {
   margin: 0;
   font-family: var(--display);
   font-size: 1.85rem;
   font-weight: 700;
+}
+
+.auth-card:not(.is-collapsed) h2#auth-title {
+  font-size: 1.45rem;
+}
+
+.auth-panel .lead {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.4;
 }
 
 .radar-stage[data-feature-visual="region"] .radar-sweep {
@@ -2583,7 +2775,28 @@ body.access-restricted #view-billing-admin {
 
 .auth-card form {
   display: grid;
-  gap: 0.85rem;
+  gap: 0.65rem;
+}
+
+.auth-card:not(.is-collapsed) .auth-tabs {
+  margin-bottom: 0.1rem;
+}
+
+.auth-card input[type='email'],
+.auth-card input[type='password'] {
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+}
+
+.auth-card .btn.primary {
+  padding: 0.65rem 1rem;
+  margin-top: 0.15rem;
+}
+
+.auth-card .hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
 }
 
 @media (max-width: 900px) {
@@ -2813,5 +3026,43 @@ body.access-restricted #view-billing-admin {
 
   body.is-native-app .panel.dash-panel .lead {
     font-size: 0.88rem;
+  }
+
+  body.is-native-app .form-panel-compact {
+    padding: 0.7rem 0.75rem 0.85rem;
+  }
+
+  body.is-native-app .form-panel-compact h2 {
+    font-size: 1.05rem;
+  }
+
+  body.is-native-app .monitor-form-compact {
+    gap: 0.45rem;
+  }
+
+  body.is-native-app .monitor-form-compact input[type='text'],
+  body.is-native-app .monitor-form-compact input[type='url'],
+  body.is-native-app .monitor-form-compact input[type='number'] {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.86rem;
+  }
+
+  body.is-native-app .monitor-form-compact .btn-compact {
+    padding: 0.4rem 0.55rem;
+    font-size: 0.78rem;
+  }
+
+  body.is-native-app .plan-card.plan-row {
+    padding: 0.55rem 0.65rem;
+  }
+
+  body.is-native-app .plan-cell-name h3 {
+    font-size: 0.95rem;
+  }
+
+  body.is-native-app .plan-cell-action .btn {
+    min-width: 3.8rem;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.78rem;
   }
 }

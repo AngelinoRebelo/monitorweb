@@ -2,6 +2,9 @@ const $ = (sel) => document.querySelector(sel);
 
 const els = {
   form: $('#auth-form'),
+  card: $('#auth-card'),
+  panel: $('#auth-panel'),
+  prompt: $('#auth-prompt'),
   title: $('#auth-title'),
   lead: $('#auth-lead'),
   submit: $('#auth-submit'),
@@ -122,7 +125,7 @@ if (stage && window.matchMedia('(pointer: fine)').matches) {
   });
 }
 
-let mode = 'login';
+let mode = null;
 let registrationOpen = false;
 
 async function api(path, options = {}) {
@@ -197,6 +200,13 @@ function setMode(next) {
     forgot: 'Solicitar recuperação',
   };
 
+  if (els.card) els.card.classList.remove('is-collapsed');
+  if (els.panel) {
+    els.panel.hidden = false;
+    els.panel.removeAttribute('hidden');
+  }
+  if (els.prompt) els.prompt.hidden = true;
+
   els.title.textContent = titles[mode];
   els.lead.textContent = leads[mode];
   els.submit.textContent = submits[mode];
@@ -208,6 +218,11 @@ function setMode(next) {
   els.error.hidden = true;
   els.ok.hidden = true;
   hidePaywall();
+  // Focus first field after expand
+  requestAnimationFrame(() => {
+    const email = $('#email');
+    email?.focus?.();
+  });
 }
 
 function showError(message) {
@@ -230,6 +245,9 @@ els.tabs.forEach((tab) => {
 
 els.form.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!mode) {
+    setMode('login');
+  }
   els.error.hidden = true;
   els.ok.hidden = true;
   hidePaywall();
@@ -274,6 +292,7 @@ els.form.addEventListener('submit', async (e) => {
   hidePaywall();
   try {
     if (new URLSearchParams(location.search).get('reset') === '1') {
+      setMode('login');
       showOk('Senha atualizada. Entre com a nova senha.');
     }
     const status = await api('/auth/status');
