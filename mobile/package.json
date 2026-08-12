@@ -1,0 +1,29 @@
+{
+  "name": "monitorweb-android",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Casca Android (Capacitor) do MonitorWeb — a UI/API continuam no servidor web",
+  "scripts": {
+    "sync": "npx cap sync android",
+    "open": "npx cap open android",
+    "add:android": "npx cap add android",
+    "doctor": "npx cap doctor",
+    "config:prod": "node scripts/write-config.mjs prod",
+    "config:local": "node scripts/write-config.mjs local",
+    "prepare:prod": "npm run config:prod && npm run sync",
+    "prepare:local": "npm run config:local && npm run sync"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/app": "^7.0.2",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/splash-screen": "^7.0.2",
+    "@capacitor/status-bar": "^7.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

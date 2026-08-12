@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>MonitorWeb</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1c16;
+        --fg: #e8f2ec;
+        --muted: #9bb5a8;
+        --accent: #d4a24c;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: radial-gradient(1200px 600px at 20% -10%, #16382c, var(--bg) 55%);
+        color: var(--fg);
+        font-family: Georgia, 'Times New Roman', serif;
+      }
+      main {
+        min-height: 100vh;
+        display: grid;
+        place-content: center;
+        gap: 0.75rem;
+        padding: 2rem;
+        text-align: center;
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.75rem;
+        letter-spacing: 0.02em;
+      }
+      p {
+        margin: 0;
+        color: var(--muted);
+        font-family: system-ui, sans-serif;
+        font-size: 0.95rem;
+        max-width: 28rem;
+      }
+      .dot {
+        width: 0.65rem;
+        height: 0.65rem;
+        border-radius: 50%;
+        background: var(--accent);
+        margin: 0.5rem auto 0;
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 0.35;
+          transform: scale(0.9);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.1);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>MonitorWeb</h1>
+      <p>Abrindo o app… Se esta tela permanecer, verifique a conexão ou a URL em <code>capacitor.config.json</code>.</p>
+      <div class="dot" aria-hidden="true"></div>
+    </main>
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        var C = window.Capacitor;
+        if (!C || !C.Plugins) return;
+        try {
+          C.Plugins.SplashScreen && C.Plugins.SplashScreen.hide();
+        } catch (e) {}
+        try {
+          C.Plugins.App &&
+            C.Plugins.App.addListener('backButton', function (ev) {
+              if (ev && ev.canGoBack) window.history.back();
+              else C.Plugins.App.exitApp();
+            });
+        } catch (e) {}
+      });
+    </script>
+  </body>
+</html>

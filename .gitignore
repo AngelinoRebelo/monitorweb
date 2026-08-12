@@ -15,3 +15,16 @@ relay/.relay_secret
 relay/node_modules/
 relay-cf/node_modules/
 relay-cf/.wrangler/
+
+# Android / Capacitor
+mobile/node_modules/
+mobile/android/.gradle/
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/local.properties
+mobile/android/keystore.properties
+mobile/android/*.jks
+mobile/android/*.keystore
+*.apk
+*.aab
+

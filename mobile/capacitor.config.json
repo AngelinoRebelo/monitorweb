@@ -1,0 +1,24 @@
+{
+  "appId": "br.com.monitorweb.app",
+  "appName": "MonitorWeb",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "url": "https://monitorweb-production.up.railway.app",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "backgroundColor": "#0b1c16",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0b1c16"
+    }
+  }
+}

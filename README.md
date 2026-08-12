@@ -21,6 +21,21 @@ npm start
 
 Abra http://localhost:3000
 
+## App Android (teste / Play Store)
+
+Casca Capacitor em [`mobile/`](mobile/) — **não altera** a web. Abre a URL do MonitorWeb no WebView.
+
+```bash
+cd mobile
+npm install
+npm run prepare:prod   # Railway
+# ou: npm run prepare:local   # emulador → http://10.0.2.2:3000
+npx cap add android    # só na primeira vez
+npm run open           # Android Studio
+```
+
+Detalhes, keystore e publicação: [`mobile/README.md`](mobile/README.md).
+
 ## Railway
 
 1. Conecte este repositório no Railway
