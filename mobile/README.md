@@ -11,20 +11,21 @@ Casca nativa para testar e, depois, publicar na Play Store.
 
 ## Performance (~8 GB RAM)
 
-O emulador Android costuma consumir **2 GB+**. Neste PC, preferir:
+Neste PC, **não rode Android Studio e o emulador ao mesmo tempo** — os dois juntos esgotam a memória e o emulador trava (“não está respondendo”).
 
-1. Fechar o emulador quando não estiver testando (`pkill -f qemu-system-x86_64`)
-2. Abrir o Studio pelo modo leve:
+Fluxo recomendado:
 
 ```bash
-./scripts/studio-light.sh
+# editar código nativo
+./scripts/studio-light.sh          # fecha o emulador e abre o Studio
+
+# testar o app
+./scripts/emu-lite.sh              # fecha o Studio e sobe emulador leve (1 GB)
 ```
 
-3. Testar no **celular físico** (USB + depuração USB) em vez do AVD
-4. Heap do Studio limitado a ~1,25 GB (`~/.config/Google/AndroidStudio*/studio64.vmoptions`)
-5. Gradle limitado a 1 GB / 2 workers (`android/gradle.properties`)
+Alternativa ainda melhor: celular físico via USB (quase zero RAM extra no PC).
 
-O AVD `MonitorWeb_API35` foi ajustado para **1536 MB RAM** e **2 cores**.
+O AVD `MonitorWeb_Lite` usa 1024 MB RAM, 2 cores e tela 720×1280.
 
 ## Setup (uma vez)
 
