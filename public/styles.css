@@ -88,6 +88,7 @@ body {
   align-items: center;
   gap: 0.75rem;
   padding: 0.25rem 0.35rem;
+  order: 1;
 }
 
 .brand-copy {
@@ -99,11 +100,21 @@ body {
   display: contents;
 }
 
+.side-nav {
+  display: grid;
+  gap: 0.35rem;
+  order: 2;
+  flex: 1 1 auto;
+  align-content: start;
+  min-height: 0;
+}
+
 .account-actions {
   display: grid;
   gap: 0.45rem;
   margin-top: auto;
   width: 100%;
+  order: 3;
 }
 
 .account-btns {
@@ -121,11 +132,6 @@ body {
   border-color: rgba(93, 202, 160, 0.55);
   color: var(--ok);
   box-shadow: 0 0 0 1px rgba(93, 202, 160, 0.12);
-}
-
-.side-nav {
-  display: grid;
-  gap: 0.35rem;
 }
 
 .side-link {
@@ -2875,6 +2881,7 @@ body.access-restricted #view-billing-admin {
     gap: 0.55rem;
     padding: 0;
     min-width: 0;
+    order: initial;
   }
 
   .sidebar-brand .mark-img img {
@@ -2896,6 +2903,7 @@ body.access-restricted #view-billing-admin {
     margin: 0;
     width: auto;
     flex: 0 0 auto;
+    order: initial;
   }
 
   .account-actions .user-email {
@@ -2932,6 +2940,10 @@ body.access-restricted #view-billing-admin {
       linear-gradient(180deg, rgba(14, 34, 27, 0.82), rgba(8, 20, 16, 0.96));
     backdrop-filter: blur(18px);
     box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.35);
+    order: initial;
+    flex: initial;
+    align-content: initial;
+    min-height: 0;
   }
 
   .side-link {
