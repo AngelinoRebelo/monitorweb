@@ -2354,6 +2354,37 @@ dialog::backdrop {
   line-height: 1.35;
 }
 
+.android-download {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+  max-width: 28rem;
+}
+
+.android-download-btn {
+  justify-self: start;
+  text-decoration: none;
+  text-align: center;
+  padding: 0.65rem 1.1rem;
+}
+
+.android-download-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+body.is-native-app .web-only-download,
+body.is-native-app .android-download {
+  display: none !important;
+}
+
+.web-only-download {
+  text-decoration: none;
+  text-align: center;
+}
+
 .auth-panel {
   display: grid;
   gap: 0.65rem;

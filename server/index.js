@@ -34,6 +34,7 @@ const PUBLIC_FILES = new Set([
   '/icon.png',
   '/manifest.json',
   '/sw.js',
+  '/downloads/MonitorWeb.apk',
 ]);
 
 app.disable('x-powered-by');
@@ -66,7 +67,16 @@ app.use((req, res, next) => {
   return next();
 });
 
-app.use(express.static(publicDir));
+app.use(
+  express.static(publicDir, {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('.apk')) {
+        res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+        res.setHeader('Content-Disposition', 'attachment; filename="MonitorWeb.apk"');
+      }
+    },
+  })
+);
 
 app.use((req, res, next) => {
   if (req.method !== 'GET' || req.path.startsWith('/api')) return next();

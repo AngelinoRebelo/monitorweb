@@ -68,6 +68,21 @@ Aparelho físico na mesma rede Wi‑Fi:
 MONITORWEB_URL=http://SEU_IP_LAN:3000 npm run prepare:local
 ```
 
+## Download no site (agora)
+
+O APK fica em `public/downloads/MonitorWeb.apk` e aparece na tela de login + painel web.
+
+```bash
+cd mobile
+./scripts/publish-apk.sh
+# depois: commit + push (+ railway up) na raiz do repo
+```
+
+Sem `keystore.properties`, o script publica o APK **debug** (assinado, instalável com “fontes desconhecidas”).
+Com keystore configurado, publica o **release**.
+
+Link público: `https://SEU_DOMINIO/downloads/MonitorWeb.apk`
+
 ## Play Store (depois)
 
 1. Conta em [Google Play Console](https://play.google.com/console)
@@ -77,8 +92,8 @@ MONITORWEB_URL=http://SEU_IP_LAN:3000 npm run prepare:local
 keytool -genkey -v -keystore monitorweb-upload.jks -keyalg RSA -keysize 2048 -validity 10000 -alias monitorweb
 ```
 
-3. Em `android/app/build.gradle`, configurar `signingConfigs` de `release` (não commitar o `.jks` nem senhas)
-4. Build → Generate Signed Bundle / APK → **Android App Bundle (.aab)**
+3. Copiar `android/keystore.properties.example` → `android/keystore.properties` (não commitar)
+4. `./scripts/publish-apk.sh` ou Build → Generate Signed Bundle → **Android App Bundle (.aab)**
 5. Enviar o AAB num track de teste interno na Play Console
 
 Identidade do app (já definida):
