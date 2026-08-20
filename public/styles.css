@@ -445,7 +445,7 @@ body {
 
 .plans-table th,
 .plans-table td {
-  padding: 0.65rem 0.75rem;
+  padding: 0.95rem 0.9rem;
   text-align: left;
   vertical-align: middle;
   border-bottom: 1px solid rgba(232, 243, 236, 0.08);
@@ -471,7 +471,8 @@ body {
 }
 
 .plans-table .plan-cell-name {
-  width: 22%;
+  width: 24%;
+  min-height: 4.5rem;
 }
 
 .plans-table .plan-cell-price {
@@ -479,12 +480,13 @@ body {
 }
 
 .plans-table .plan-cell-features {
-  width: 42%;
+  width: 38%;
 }
 
 .plans-table .plan-cell-action {
-  width: 18%;
+  width: 20%;
   text-align: right;
+  vertical-align: stretch;
 }
 
 .plan-name-wrap {
@@ -496,8 +498,9 @@ body {
 
 .plan-name-wrap strong {
   font-family: var(--display);
-  font-size: 1rem;
+  font-size: 1.15rem;
   font-weight: 700;
+  line-height: 1.2;
 }
 
 .plans-table .plan-seal {
@@ -509,24 +512,44 @@ body {
 
 .plans-table .plan-price {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   display: inline;
 }
 
 .plans-table .plan-mini-hint {
-  margin: 0.15rem 0 0;
+  margin: 0.28rem 0 0;
+  font-size: 0.78rem;
 }
 
 .plans-table .plan-features-line {
   display: block;
+  font-size: 0.84rem;
+  line-height: 1.35;
 }
 
-.plans-table .plan-cell-action .btn {
+.plans-table .plan-cell-action .btn,
+.plan-actions-table .btn {
   margin: 0;
-  width: auto;
-  min-width: 4.25rem;
-  padding: 0.45rem 0.85rem;
-  font-size: 0.82rem;
+  width: 100%;
+  min-width: 0;
+  min-height: 4.5rem;
+  padding: 0.85rem 1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plan-actions-table {
+  display: grid;
+  align-items: stretch;
+  justify-items: stretch;
+  gap: 0.35rem;
+  width: 100%;
+  height: 100%;
+  min-height: 4.5rem;
 }
 
 .plan-card {
@@ -1020,7 +1043,14 @@ body {
     grid-area: action;
     width: auto;
     text-align: right;
-    align-self: center;
+    align-self: stretch;
+    min-width: 6.5rem;
+  }
+
+  .plans-table .plan-cell-action .btn,
+  .plan-actions-table .btn {
+    min-height: 4.25rem;
+    font-size: 0.95rem;
   }
 
   .plans-table .plan-price {
@@ -1903,17 +1933,6 @@ input:focus {
 .event .actions {
   margin-top: 0;
   flex-shrink: 0;
-}
-
-.plan-actions-table {
-  display: grid;
-  justify-items: end;
-  gap: 0.35rem;
-  width: 100%;
-}
-
-.plan-actions-table .btn {
-  min-width: 5rem;
 }
 
 .edit-monitor-dialog {
@@ -3344,9 +3363,10 @@ body.access-restricted #view-billing-admin {
     font-size: 0.95rem;
   }
 
-  body.is-native-app .plan-cell-action .btn {
-    min-width: 3.8rem;
-    padding: 0.4rem 0.7rem;
-    font-size: 0.78rem;
+  body.is-native-app .plans-table .plan-cell-action .btn,
+  body.is-native-app .plan-actions-table .btn {
+    min-height: 4.25rem;
+    padding: 0.75rem 0.85rem;
+    font-size: 0.95rem;
   }
 }
