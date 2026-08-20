@@ -1886,9 +1886,71 @@ input:focus {
   margin-top: 0.75rem;
 }
 
+.actions.actions-table {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  width: 100%;
+  max-width: 22rem;
+}
+
+.actions.actions-table .btn {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+}
+
 .event .actions {
   margin-top: 0;
   flex-shrink: 0;
+}
+
+.plan-actions-table {
+  display: grid;
+  justify-items: end;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.plan-actions-table .btn {
+  min-width: 5rem;
+}
+
+.edit-monitor-dialog {
+  width: min(440px, 96vw);
+}
+
+.edit-monitor-body {
+  padding: 1rem 1.1rem 1.15rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.edit-monitor-body header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.edit-monitor-body h3 {
+  margin: 0;
+}
+
+.edit-monitor-form {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.edit-monitor-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.edit-monitor-actions .btn {
+  width: 100%;
 }
 
 .empty {

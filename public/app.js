@@ -62,6 +62,16 @@ const els = {
   diffSummary: $('#diff-summary'),
   diffView: $('#diff-view'),
   diffClose: $('#diff-close'),
+  editMonitorDialog: $('#edit-monitor-dialog'),
+  editMonitorForm: $('#edit-monitor-form'),
+  editMonitorClose: $('#edit-monitor-close'),
+  editMonitorCancel: $('#edit-monitor-cancel'),
+  editMonitorError: $('#edit-monitor-error'),
+  editId: $('#edit-id'),
+  editName: $('#edit-name'),
+  editUrl: $('#edit-url'),
+  editIntervalSeconds: $('#edit-intervalSeconds'),
+  editSelector: $('#edit-selector'),
   pickerDialog: $('#picker-dialog'),
   pickerClose: $('#picker-close'),
   pickerFrame: $('#picker-frame'),
@@ -612,8 +622,9 @@ function renderMonitors(monitors) {
                 }${escapeHtml(m.lastError)}</p>`
               : ''
           }
-          <div class="actions">
+          <div class="actions actions-table">
             <button class="btn small" data-action="check" type="button">Verificar agora</button>
+            <button class="btn small" data-action="edit" type="button">Editar</button>
             <button class="btn small" data-action="toggle" type="button">${m.enabled ? 'Pausar' : 'Ativar'}</button>
             <button class="btn small danger" data-action="delete" type="button">Excluir</button>
           </div>
@@ -1275,6 +1286,10 @@ els.monitors?.addEventListener('click', async (e) => {
   const action = btn.dataset.action;
 
   try {
+    if (action === 'edit') {
+      openEditMonitor(id);
+      return;
+    }
     if (action === 'check') {
       btn.disabled = true;
       await api(`/monitors/${id}/check`, { method: 'POST', body: '{}' });
@@ -1296,6 +1311,67 @@ els.monitors?.addEventListener('click', async (e) => {
     alert(err.message);
   } finally {
     btn.disabled = false;
+  }
+});
+
+function openEditMonitor(id) {
+  const m = cachedMonitors.find((x) => x.id === id);
+  if (!m || !els.editMonitorDialog) return;
+  if (els.editMonitorError) {
+    els.editMonitorError.hidden = true;
+    els.editMonitorError.textContent = '';
+  }
+  if (els.editId) els.editId.value = m.id;
+  if (els.editName) els.editName.value = m.name || '';
+  if (els.editUrl) els.editUrl.value = m.url || '';
+  if (els.editIntervalSeconds) els.editIntervalSeconds.value = String(monitorIntervalSeconds(m));
+  if (els.editSelector) els.editSelector.value = m.selector || '';
+  if (!els.editMonitorDialog.open) els.editMonitorDialog.showModal();
+  requestAnimationFrame(() => els.editName?.focus?.());
+}
+
+function closeEditMonitor() {
+  els.editMonitorDialog?.close();
+}
+
+els.editMonitorClose?.addEventListener('click', () => closeEditMonitor());
+els.editMonitorCancel?.addEventListener('click', () => closeEditMonitor());
+els.editMonitorDialog?.addEventListener('click', (e) => {
+  if (e.target === els.editMonitorDialog) closeEditMonitor();
+});
+
+els.editMonitorForm?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = els.editId?.value;
+  if (!id) return;
+  const body = {
+    name: els.editName?.value.trim() || '',
+    url: els.editUrl?.value.trim() || '',
+    intervalSeconds: Math.max(30, Number(els.editIntervalSeconds?.value) || 300),
+    selector: els.editSelector?.value.trim() || '',
+  };
+  const submitBtn = els.editMonitorForm.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+  if (els.editMonitorError) {
+    els.editMonitorError.hidden = true;
+    els.editMonitorError.textContent = '';
+  }
+  try {
+    await api(`/monitors/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+    closeEditMonitor();
+    await refresh();
+  } catch (err) {
+    if (els.editMonitorError) {
+      els.editMonitorError.textContent = err.message || 'Não foi possível salvar.';
+      els.editMonitorError.hidden = false;
+    } else {
+      alert(err.message);
+    }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
 });
 
@@ -1604,11 +1680,13 @@ function renderPlans(plans) {
         <span class="plan-features-line">${featureLine}</span>
       </td>
       <td class="plan-cell plan-cell-action">
-        <button type="button" class="btn primary btn-compact" data-action="checkout" data-plan-id="${escapeHtml(p.id)}"${
-          checkoutLocked ? ' disabled aria-disabled="true"' : ''
-        }>
-          ${checkoutLocked ? 'Ativo' : 'Pagar'}
-        </button>
+        <div class="plan-actions-table">
+          <button type="button" class="btn primary btn-compact" data-action="checkout" data-plan-id="${escapeHtml(p.id)}"${
+            checkoutLocked ? ' disabled aria-disabled="true"' : ''
+          }>
+            ${checkoutLocked ? 'Ativo' : 'Pagar'}
+          </button>
+        </div>
       </td>
     </tr>`;
     })

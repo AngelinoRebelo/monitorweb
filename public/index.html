@@ -343,6 +343,52 @@
         </section>
       </div>
     </div>
+    <dialog id="edit-monitor-dialog" class="edit-monitor-dialog">
+      <div class="dialog-body edit-monitor-body">
+        <header>
+          <div>
+            <h3>Editar monitor</h3>
+            <p class="diff-summary">Ajuste nome, URL, intervalo e seletor.</p>
+          </div>
+          <button type="button" id="edit-monitor-close" class="btn ghost">Fechar</button>
+        </header>
+        <form id="edit-monitor-form" class="monitor-form-compact edit-monitor-form">
+          <input type="hidden" id="edit-id" name="id" />
+          <label>
+            Nome
+            <input id="edit-name" name="name" type="text" placeholder="Ex.: DOERJ — capa" />
+          </label>
+          <label>
+            URL
+            <input id="edit-url" name="url" type="url" required placeholder="https://exemplo.com/pagina" />
+          </label>
+          <div class="row">
+            <label>
+              Intervalo (seg)
+              <input
+                id="edit-intervalSeconds"
+                name="intervalSeconds"
+                type="number"
+                min="30"
+                step="30"
+                value="300"
+                required
+              />
+            </label>
+            <label>
+              Seletor CSS (opcional)
+              <input id="edit-selector" name="selector" type="text" placeholder="#conteudo, .main" />
+            </label>
+          </div>
+          <p id="edit-monitor-error" class="auth-error" hidden></p>
+          <div class="edit-monitor-actions">
+            <button type="button" id="edit-monitor-cancel" class="btn ghost">Cancelar</button>
+            <button type="submit" class="btn primary">Salvar</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+
     <dialog id="diff-dialog">
       <div class="dialog-body">
         <header>
