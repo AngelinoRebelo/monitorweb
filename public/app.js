@@ -149,6 +149,23 @@ function formatDate(iso) {
   }
 }
 
+function monitorIntervalSeconds(m) {
+  const sec = Number(m?.intervalSeconds);
+  if (Number.isFinite(sec) && sec > 0) return Math.max(30, Math.floor(sec));
+  const min = Number(m?.intervalMinutes);
+  if (Number.isFinite(min) && min > 0) return Math.max(30, Math.floor(min * 60));
+  return 300;
+}
+
+function formatIntervalLabel(m) {
+  const sec = monitorIntervalSeconds(m);
+  if (sec < 60) return `${sec} s`;
+  if (sec % 60 === 0) return `${sec / 60} min`;
+  const mins = Math.floor(sec / 60);
+  const rem = sec % 60;
+  return `${mins} min ${rem} s`;
+}
+
 function statusLabel(status) {
   return (
     {
@@ -570,7 +587,7 @@ function renderMonitors(monitors) {
 
         <div class="accordion-summary">
           <p class="meta"><a href="${escapeAttr(m.url)}" target="_blank" rel="noopener">${escapeHtml(m.url)}</a></p>
-          <p class="meta">A cada ${m.intervalMinutes} min${m.selector ? ` · seletor <code>${escapeHtml(m.selector)}</code>` : ''}${m.lastContentKind ? ` · fonte <code>${escapeHtml(m.lastContentKind)}</code>` : ''}${
+          <p class="meta">A cada ${formatIntervalLabel(m)}${m.selector ? ` · seletor <code>${escapeHtml(m.selector)}</code>` : ''}${m.lastContentKind ? ` · fonte <code>${escapeHtml(m.lastContentKind)}</code>` : ''}${
             m.pendingHashCount
               ? ` · confirmando ${Number(m.pendingHashCount)}/2`
               : ''
@@ -1025,14 +1042,14 @@ els.form?.addEventListener('submit', async (e) => {
   const body = {
     name: $('#name').value.trim(),
     url: $('#url').value.trim(),
-    intervalMinutes: Number($('#intervalMinutes').value) || 5,
+    intervalSeconds: Math.max(30, Number($('#intervalSeconds').value) || 300),
     selector: $('#selector').value.trim(),
     enabled: $('#enabled').checked,
   };
   try {
     await api('/monitors', { method: 'POST', body: JSON.stringify(body) });
     els.form.reset();
-    $('#intervalMinutes').value = '5';
+    $('#intervalSeconds').value = '300';
     $('#enabled').checked = true;
     updateSelectorHint('');
     try {

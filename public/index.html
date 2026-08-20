@@ -116,8 +116,17 @@
                 </label>
                 <div class="row">
                   <label>
-                    Intervalo (min)
-                    <input id="intervalMinutes" name="intervalMinutes" type="number" min="1" value="5" required />
+                    Intervalo (seg)
+                    <input
+                      id="intervalSeconds"
+                      name="intervalSeconds"
+                      type="number"
+                      min="30"
+                      step="30"
+                      value="300"
+                      required
+                      title="Mínimo 30 segundos"
+                    />
                   </label>
                   <label>
                     Seletor CSS (opcional)

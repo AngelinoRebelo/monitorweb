@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { normalizeIntervalSeconds } from './interval.js';
 
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'store.json');
@@ -138,11 +139,13 @@ export function createMonitor({
   userId,
   name,
   url,
-  intervalMinutes = 5,
+  intervalSeconds,
+  intervalMinutes,
   selector = '',
   enabled = true,
 }) {
   if (!userId) throw new Error('userId é obrigatório');
+  const seconds = normalizeIntervalSeconds({ intervalSeconds, intervalMinutes });
   const store = read();
   const now = new Date().toISOString();
   const monitor = {
@@ -150,7 +153,9 @@ export function createMonitor({
     userId,
     name: name?.trim() || new URL(url).hostname,
     url: url.trim(),
-    intervalMinutes: Math.max(1, Number(intervalMinutes) || 5),
+    intervalSeconds: seconds,
+    // legado (UI/API antiga em minutos)
+    intervalMinutes: Math.max(1, Math.round(seconds / 60)),
     selector: (selector || '').trim(),
     enabled: Boolean(enabled),
     favorite: false,
@@ -177,6 +182,15 @@ export function updateMonitor(id, patch) {
   delete safe.userId;
   delete safe.createdAt;
   delete safe.lastContent;
+  if (safe.intervalSeconds != null || safe.intervalMinutes != null) {
+    const seconds = normalizeIntervalSeconds({
+      intervalSeconds: safe.intervalSeconds ?? current.intervalSeconds,
+      intervalMinutes:
+        safe.intervalSeconds != null ? undefined : safe.intervalMinutes ?? current.intervalMinutes,
+    });
+    safe.intervalSeconds = seconds;
+    safe.intervalMinutes = Math.max(1, Math.round(seconds / 60));
+  }
   store.monitors[idx] = {
     ...current,
     ...safe,

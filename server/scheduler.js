@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { listAllMonitors, getMonitor } from './db.js';
 import { checkMonitor } from './monitor.js';
 import { notifyChange, notifyStatus } from './notify.js';
+import { getMonitorIntervalSeconds } from './interval.js';
 
 /** @type {Map<string, import('node-cron').ScheduledTask>} */
 const jobs = new Map();
@@ -9,6 +10,9 @@ const running = new Set();
 const queue = [];
 let active = 0;
 const MAX_CONCURRENT = 2;
+/** Tique global: avalia quais monitores já venceram o intervalo. */
+const TICK_CRON = '*/15 * * * * *';
+let tickTask = null;
 
 async function executeCheck(id, reason = 'schedule') {
   if (running.has(id)) return;
@@ -117,24 +121,40 @@ async function runCheck(id, reason = 'schedule') {
   await waitUntilIdle(id);
 }
 
-function cronExpression(intervalMinutes) {
-  const minutes = Math.max(1, Number(intervalMinutes) || 5);
-  if (minutes < 60) return `*/${minutes} * * * *`;
-  const hours = Math.min(24, Math.floor(minutes / 60));
-  return `0 */${hours} * * *`;
+function isDue(monitor, now = Date.now()) {
+  if (!monitor?.enabled) return false;
+  if (!monitor.lastCheckedAt) return true;
+  const last = Date.parse(monitor.lastCheckedAt);
+  if (!Number.isFinite(last)) return true;
+  return now - last >= getMonitorIntervalSeconds(monitor) * 1000;
+}
+
+function enqueueDueMonitors() {
+  const now = Date.now();
+  for (const monitor of listAllMonitors()) {
+    if (!isDue(monitor, now)) continue;
+    if (running.has(monitor.id) || queue.some((item) => item.id === monitor.id)) continue;
+    queue.push({ id: monitor.id, reason: 'schedule' });
+  }
+  pumpQueue();
+}
+
+function ensureTick() {
+  if (tickTask) return;
+  if (!cron.validate(TICK_CRON)) {
+    console.error('[scheduler] expressão de tique inválida:', TICK_CRON);
+    return;
+  }
+  tickTask = cron.schedule(TICK_CRON, () => {
+    enqueueDueMonitors();
+  });
 }
 
 export function scheduleMonitor(monitor) {
+  // Agendamento é global (tique a cada 15s). Mantemos a API para o restante do código.
   unscheduleMonitor(monitor.id);
   if (!monitor.enabled) return;
-
-  const expr = cronExpression(monitor.intervalMinutes);
-  if (!cron.validate(expr)) return;
-
-  const task = cron.schedule(expr, () => {
-    runCheck(monitor.id, 'schedule');
-  });
-  jobs.set(monitor.id, task);
+  ensureTick();
 }
 
 export function unscheduleMonitor(id) {
@@ -147,7 +167,7 @@ export function unscheduleMonitor(id) {
 
 export function rescheduleAll() {
   for (const id of [...jobs.keys()]) unscheduleMonitor(id);
-  for (const monitor of listAllMonitors()) scheduleMonitor(monitor);
+  ensureTick();
 }
 
 export function startScheduler() {

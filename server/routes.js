@@ -18,6 +18,7 @@ import { notifyChange, notifyStatus } from './notify.js';
 import { fetchResponse, decodeResponseBody, formatFetchError } from './fetchPage.js';
 import { fetchPageForPicker, fetchSelectorSample } from './preview.js';
 import { getUserQuota } from './auth.js';
+import { normalizeIntervalSeconds } from './interval.js';
 
 const router = Router();
 
@@ -33,7 +34,12 @@ function isValidUrl(value) {
 function publicMonitor(monitor) {
   if (!monitor) return null;
   const { lastContent, pendingContent, ...rest } = monitor;
-  return rest;
+  const intervalSeconds = normalizeIntervalSeconds(monitor);
+  return {
+    ...rest,
+    intervalSeconds,
+    intervalMinutes: Math.max(1, Math.round(intervalSeconds / 60)),
+  };
 }
 
 function ownedMonitor(req, id) {
@@ -144,7 +150,7 @@ router.get('/monitors', (req, res) => {
 });
 
 router.post('/monitors', (req, res) => {
-  const { name, url, intervalMinutes, selector, enabled } = req.body || {};
+  const { name, url, intervalSeconds, intervalMinutes, selector, enabled } = req.body || {};
   if (!url || !isValidUrl(url)) {
     return res.status(400).json({ error: 'URL inválida. Use http:// ou https://' });
   }
@@ -166,6 +172,7 @@ router.post('/monitors', (req, res) => {
     userId: req.user.id,
     name,
     url,
+    intervalSeconds,
     intervalMinutes,
     selector,
     enabled,
@@ -193,8 +200,13 @@ router.patch('/monitors/:id', (req, res) => {
   if (patch.url && !isValidUrl(patch.url)) {
     return res.status(400).json({ error: 'URL inválida' });
   }
-  if (patch.intervalMinutes != null) {
-    patch.intervalMinutes = Math.max(1, Number(patch.intervalMinutes) || 5);
+  if (patch.intervalSeconds != null || patch.intervalMinutes != null) {
+    const seconds = normalizeIntervalSeconds({
+      intervalSeconds: patch.intervalSeconds,
+      intervalMinutes: patch.intervalSeconds != null ? undefined : patch.intervalMinutes,
+    });
+    patch.intervalSeconds = seconds;
+    patch.intervalMinutes = Math.max(1, Math.round(seconds / 60));
   }
   if (patch.favorite != null) {
     patch.favorite = Boolean(patch.favorite);
