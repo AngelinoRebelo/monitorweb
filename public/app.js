@@ -291,6 +291,8 @@ function syncEmailNotifyUi(user) {
     els.btnDesktopNotify.setAttribute('aria-checked', desktopNotifyEnabled ? 'true' : 'false');
   }
 
+  updateNotifyUi();
+
   if (els.emailNotifyStatus) {
     if (!emailOk) {
       els.emailNotifyStatus.textContent =
@@ -376,9 +378,17 @@ function updateNotifyUi() {
     els.notifyStatus.textContent = `Permissão do navegador: ${map[perm] || perm}`;
   }
   if (els.btnNotify) {
-    const on = perm === 'granted' || nativeNotifyReady;
+    const prefOn = browserNotifyEnabled || desktopNotifyEnabled;
+    const permOk =
+      perm === 'granted' || nativeNotifyReady || (isNativeApp() && nativeNotifyReady);
+    // Preferência ligada = ON (mesmo antes da permissão; o clique desliga de propósito).
+    const on = prefOn && (permOk || perm === 'default' || perm === 'unsupported');
     els.btnNotify.textContent = on ? 'Alertas ON' : 'Alertas';
     els.btnNotify.classList.toggle('is-live', on);
+    els.btnNotify.setAttribute('aria-pressed', on ? 'true' : 'false');
+    els.btnNotify.title = on
+      ? 'Alertas ativos — clique para desativar'
+      : 'Alertas desativados — clique para ativar';
   }
 }
 
@@ -803,6 +813,34 @@ async function refresh() {
   browserNotifyEnabled = settings.browserNotifications !== false;
   desktopNotifyEnabled = settings.desktopNotifications !== false;
   syncEmailNotifyUi(currentUser);
+  updateNotifyUi();
+  // Alertas ligados por padrão: pede permissão automaticamente na primeira visita.
+  if (browserNotifyEnabled || desktopNotifyEnabled) {
+    void ensureAlertsEnabledByDefault();
+  }
+}
+
+let alertsBootstrapped = false;
+async function ensureAlertsEnabledByDefault() {
+  if (alertsBootstrapped) return;
+  alertsBootstrapped = true;
+  try {
+    if (isNativeApp()) {
+      await enableNativeNotifications();
+      return;
+    }
+    if (!('Notification' in window)) {
+      updateNotifyUi();
+      return;
+    }
+    if (Notification.permission === 'default') {
+      await enableBrowserNotifications();
+    } else {
+      updateNotifyUi();
+    }
+  } catch {
+    updateNotifyUi();
+  }
 }
 
 function adminFlash(message, isError = false) {
@@ -1473,7 +1511,43 @@ els.diffDialog?.addEventListener('click', (e) => {
   if (e.target === els.diffDialog) els.diffDialog.close();
 });
 
-els.btnNotify?.addEventListener('click', () => enableBrowserNotifications());
+els.btnNotify?.addEventListener('click', async () => {
+  const currentlyOn = els.btnNotify.classList.contains('is-live');
+  if (currentlyOn) {
+    browserNotifyEnabled = false;
+    desktopNotifyEnabled = false;
+    try {
+      await api('/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          browserNotifications: false,
+          desktopNotifications: false,
+        }),
+      });
+    } catch {
+      /* ignore */
+    }
+    syncEmailNotifyUi(currentUser);
+    updateNotifyUi();
+    return;
+  }
+  browserNotifyEnabled = true;
+  desktopNotifyEnabled = true;
+  try {
+    await api('/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        browserNotifications: true,
+        desktopNotifications: true,
+      }),
+    });
+  } catch {
+    /* ignore */
+  }
+  await enableBrowserNotifications();
+  syncEmailNotifyUi(currentUser);
+  updateNotifyUi();
+});
 
 function billingFlash(message, isError = false) {
   if (!els.billingFlash) return;
@@ -1502,7 +1576,7 @@ function renderPlans(plans) {
       ? billing.planId || currentUser?.billingPlanId || null
       : null;
 
-  els.plansGrid.innerHTML = cachedPlans
+  const rows = cachedPlans
     .map((p) => {
       const isActive = Boolean(activePlanId && p.id === activePlanId);
       const maxSites = Number(p.maxMonitors) || 100;
@@ -1511,33 +1585,51 @@ function renderPlans(plans) {
         : ['Alertas por e-mail', `Até ${maxSites} sites`];
       const checkoutLocked = isActive;
       const featureLine = features.map((f) => escapeHtml(f)).join(' · ');
+      const hint = isActive
+        ? `Vigente${billing.expiresAt ? ` até ${formatDate(billing.expiresAt)}` : ''}`
+        : `Trial até ${cachedTrialMaxMonitors} sites`;
       return `
-    <article class="plan-card plan-row${isActive ? ' is-active' : ''}" data-plan-id="${escapeHtml(p.id)}">
-      ${isActive ? `<span class="plan-seal" title="Assinatura vigente">Ativo</span>` : ''}
-      <div class="plan-cell plan-cell-name">
-        <h3>${escapeHtml(p.label)}</h3>
-        <p class="plan-mini-hint">${
-          isActive
-            ? `Vigente${billing.expiresAt ? ` até ${formatDate(billing.expiresAt)}` : ''}`
-            : `Trial até ${cachedTrialMaxMonitors} sites`
-        }</p>
-      </div>
-      <div class="plan-cell plan-cell-price">
-        <p class="plan-price">R$ ${Number(p.price).toFixed(0)} <span>/ ${Number(p.days)}d</span></p>
-      </div>
-      <div class="plan-cell plan-cell-features">
-        <p class="plan-features-line">${featureLine}</p>
-      </div>
-      <div class="plan-cell plan-cell-action">
+    <tr class="plan-row${isActive ? ' is-active' : ''}" data-plan-id="${escapeHtml(p.id)}">
+      <td class="plan-cell plan-cell-name">
+        <div class="plan-name-wrap">
+          <strong>${escapeHtml(p.label)}</strong>
+          ${isActive ? `<span class="plan-seal" title="Assinatura vigente">Ativo</span>` : ''}
+        </div>
+        <p class="plan-mini-hint">${hint}</p>
+      </td>
+      <td class="plan-cell plan-cell-price">
+        <span class="plan-price">R$ ${Number(p.price).toFixed(0)} <span>/ ${Number(p.days)}d</span></span>
+      </td>
+      <td class="plan-cell plan-cell-features">
+        <span class="plan-features-line">${featureLine}</span>
+      </td>
+      <td class="plan-cell plan-cell-action">
         <button type="button" class="btn primary btn-compact" data-action="checkout" data-plan-id="${escapeHtml(p.id)}"${
           checkoutLocked ? ' disabled aria-disabled="true"' : ''
         }>
           ${checkoutLocked ? 'Ativo' : 'Pagar'}
         </button>
-      </div>
-    </article>`;
+      </td>
+    </tr>`;
     })
     .join('');
+
+  els.plansGrid.innerHTML = `
+    <div class="plans-table-wrap">
+      <table class="plans-table">
+        <thead>
+          <tr>
+            <th scope="col">Plano</th>
+            <th scope="col">Preço</th>
+            <th scope="col">Inclui</th>
+            <th scope="col">Ação</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    </div>`;
 }
 
 let pixPollTimer = null;
